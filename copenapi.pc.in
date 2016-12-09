@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@/copenapi
+
+Name: copenapi
+Description: c openapi
+Version: @VERSION@
+Requires: jansson
+Libs: -L${libdir} -lcopenapi
+Cflags: -I${includedir}

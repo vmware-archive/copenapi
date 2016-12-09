@@ -3,20 +3,22 @@
 # copenapi
 
 ## Overview
+copenapi (C open api) is an openapi spec parser library in C. It includes a general purpose
+command line tool to browse an openapi spec file. copenapi supports openapi spec files in
+json format.
 
 ## Try it out
 
 ### Prerequisites
 
-* Prereq 1
-* Prereq 2
-* Prereq 3
+* Jansson
+* libcurl
 
 ### Build & Run
 
-1. Step 1
-2. Step 2
-3. Step 3
+1. autoreconf -mif && ./configure && make
+2. cmd line client - run cli/coapi_cli --apispec <openapi spec.json>
+3. library - pending library usage documentation
 
 ## Documentation
 

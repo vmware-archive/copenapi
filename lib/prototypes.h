@@ -13,6 +13,14 @@
  */
 
 #pragma once
+
+uint32_t
+coapi_find_tagged_module(
+    json_t *pPath,
+    PREST_API_MODULE pModules,
+    PREST_API_MODULE *ppModule
+    );
+
 //jsonutils.c
 uint32_t
 get_json_object_from_string(

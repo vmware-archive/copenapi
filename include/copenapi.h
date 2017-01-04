@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <stdint.h> //for uint32_t
 #include "copenapitypes.h"
 
 uint32_t
@@ -26,13 +27,6 @@ uint32_t
 coapi_load_from_file(
     const char *pszFile,
     PREST_API_DEF *ppApiDef
-    );
-
-uint32_t
-coapi_find_tagged_module(
-    json_t *pPath,
-    PREST_API_MODULE pModules,
-    PREST_API_MODULE *ppModule
     );
 
 uint32_t

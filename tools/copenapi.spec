@@ -1,18 +1,27 @@
-Name:    copenapi
-Summary: c open api spec parser
-Version: 0.1
-Release: 1
-Group:   Development/Libraries
-Vendor:  VMware, Inc.
-License: VMware
-URL:     http://www.vmware.com
-BuildArch: x86_64
-Requires: jansson
-BuildRequires: make
-Source0: %{name}-%{version}.tar.gz
+Name:          copenapi
+Summary:       c open api spec parser
+Version:       0.1
+Release:       3%{?dist}
+Group:         Development/Libraries
+Vendor:        VMware, Inc.
+Distribution:  Photon
+License:       Apache 2.0
+URL:           http://www.github.com/vmware/copenapi
+BuildArch:     x86_64
+Requires:      jansson
+BuildRequires: jansson-devel
+Source0:       %{name}-%{version}.tar.gz
 
 %description
 copenapi is an openapi parser written in c
+
+%package devel
+Summary: copenapi development files
+Group: Development/Libraries
+Requires: %{name} = %{version}-%{release}
+
+%description devel
+copenapi development files
 
 %prep
 %setup -q
@@ -20,24 +29,29 @@ copenapi is an openapi parser written in c
 %build
 autoreconf -mif
 ./configure \
-    --prefix=%{_prefix}
-
+    --prefix=%{_prefix} \
+    --disable-static
 make
 
 %install
 
 make install DESTDIR=$RPM_BUILD_ROOT
+rm -f %{buildroot}%{_libdir}/*.la
 
 %post
     /sbin/ldconfig
 
+%clean
+rm -rf %{buildroot}/*
+
 %files
 %defattr(-,root,root)
 %{_bindir}/*
-%{_libdir}/*
+%{_libdir}/*.so.*
+
+%files devel
 %{_libdir}/pkgconfig/copenapi.pc
 %{_includedir}/*
+%{_libdir}/*.so
 
 %changelog
-*  Wed Oct 05 2016 Priyesh Padmavilasom<ppadmavilasom@vmware.com> 0.1-1
--  Initial

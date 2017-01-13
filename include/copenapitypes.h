@@ -28,8 +28,11 @@ typedef enum _RESTMETHOD_
 typedef enum _RESTPARAMTYPE_
 {
     RESTPARAM_INTEGER = 0,
+    RESTPARAM_NUMBER,
     RESTPARAM_STRING,
+    RESTPARAM_BOOLEAN,
     RESTPARAM_ARRAY,
+    RESTPARAM_FILE,
     RESTPARAM_INVALID
 }RESTPARAMTYPE;
 
@@ -64,6 +67,8 @@ typedef struct _REST_API_PARAM_
     char *pszIn;
     int nRequired;
     RESTPARAMTYPE nType;
+    int nOptionCount;
+    char **ppszOptions;
 
     struct _REST_API_PARAM_ *pNext;
 }REST_API_PARAM, *PREST_API_PARAM;

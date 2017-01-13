@@ -282,6 +282,19 @@ show_method(
                             ++nParam,
                             pParam->pszName,
                             pParam->nRequired ? "Required" : "Optional");
+                    if(pParam->nOptionCount)
+                    {
+                        int i = 0;
+                        fprintf(stdout, "Values: [");
+                        for(i = 0; i < pParam->nOptionCount; ++i)
+                        {
+                            fprintf(stdout,
+                                    "%s%s",
+                                    pParam->ppszOptions[i],
+                                    i + 1 == pParam->nOptionCount ? "" : ", ");
+                        }
+                        fprintf(stdout, "]\n");
+                    }
                 }
             }
             fprintf(stdout, "\n");

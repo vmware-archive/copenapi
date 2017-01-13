@@ -208,6 +208,66 @@ error:
 }
 
 uint32_t
+coapi_fill_enum(
+    json_t *pJsonEnum,
+    int *pnOptionCount,
+    char ***pppszOptions
+    )
+{
+    uint32_t dwError = 0;
+    int i = 0;
+    int nOptionCount = 0;
+    json_t *pEnumValue = NULL;
+    char **ppszOptions = NULL;
+
+    if(!pJsonEnum || !pppszOptions || !pnOptionCount)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    nOptionCount = json_array_size(pJsonEnum);
+    if(nOptionCount <= 0)
+    {
+        dwError = ENODATA;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    dwError = coapi_allocate_memory(sizeof(char *) * nOptionCount,
+                                    (void **)&ppszOptions);
+    BAIL_ON_ERROR(dwError);
+
+    json_array_foreach(pJsonEnum, i, pEnumValue)
+    {
+        dwError = coapi_allocate_string(
+                      json_string_value(pEnumValue),
+                      &ppszOptions[i]);
+        BAIL_ON_ERROR(dwError);
+    }
+
+    *pnOptionCount = nOptionCount;
+    *pppszOptions = ppszOptions;
+cleanup:
+    return dwError;
+
+error:
+    if(dwError == ENODATA)
+    {
+        dwError = 0;
+    }
+    if(pppszOptions)
+    {
+        *pppszOptions = NULL;
+    }
+    if(pnOptionCount)
+    {
+        *pnOptionCount = 0;
+    }
+    coapi_free_string_array_with_count(ppszOptions, nOptionCount);
+    goto cleanup;
+}
+
+uint32_t
 coapi_load_parameters(
     json_t *pMethod,
     PREST_API_PARAM *ppParams
@@ -267,6 +327,15 @@ coapi_load_parameters(
         if(pTemp)
         {
             dwError = coapi_get_rest_type(json_string_value(pTemp), &pParam->nType);
+            BAIL_ON_ERROR(dwError);
+        }
+
+        pTemp = json_object_get(pJsonParam, "enum");
+        if(pTemp)
+        {
+            dwError = coapi_fill_enum(pTemp,
+                                      &pParam->nOptionCount,
+                                      &pParam->ppszOptions);
             BAIL_ON_ERROR(dwError);
         }
         pParam->pNext = pParams;
@@ -799,17 +868,29 @@ coapi_get_rest_type(
     {
         nType = RESTPARAM_INTEGER;
     }
+    else if(!strcasecmp(pszType, "number"))
+    {
+        nType = RESTPARAM_NUMBER;
+    }
     else if(!strcasecmp(pszType, "string"))
     {
         nType = RESTPARAM_STRING;
+    }
+    else if(!strcasecmp(pszType, "boolean"))
+    {
+        nType = RESTPARAM_BOOLEAN;
     }
     else if(!strcasecmp(pszType, "array"))
     {
         nType = RESTPARAM_ARRAY;
     }
+    else if(!strcasecmp(pszType, "file"))
+    {
+        nType = RESTPARAM_BOOLEAN;
+    }
     else
     {
-        fprintf(stderr, "type %s is not mapped\n", pszType);
+        fprintf(stderr, "type %s is not a valid parameter type\n", pszType);
         dwError = ENOENT;
         BAIL_ON_ERROR(dwError);
     }
@@ -1076,6 +1157,9 @@ coapi_free_api_param(
 
         SAFE_FREE_MEMORY(pParam->pszName);
         SAFE_FREE_MEMORY(pParam->pszIn);
+        coapi_free_string_array_with_count(
+            pParam->ppszOptions,
+            pParam->nOptionCount);
         SAFE_FREE_MEMORY(pParam);
 
         pParam = pParamTemp;

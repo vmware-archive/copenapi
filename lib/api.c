@@ -43,6 +43,16 @@ coapi_load_from_string(
     BAIL_ON_ERROR(dwError);
 
     dwError = coapi_load_modules(pRoot, &pApiDef->pModules);
+    if(dwError == ENODATA)
+    {
+        dwError = coapi_add_default_module(
+                      pApiDef->pszBasePath,
+                      &pApiDef->pModules);
+        BAIL_ON_ERROR(dwError);
+
+        pApiDef->nNoModules = 1;
+    }
+
     BAIL_ON_ERROR(dwError);
 
     dwError = coapi_load_endpoints(pRoot, pApiDef->pszBasePath, pApiDef->pModules);

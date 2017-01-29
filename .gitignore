@@ -7,8 +7,7 @@ Makefile.in
 *.sub
 *.status
 *.log
-*_cstub.c
-*_sstub.c
+*.pc
 .deps
 .libs
 
@@ -27,7 +26,6 @@ ltmain.sh
 libtool
 ar-lib
 
-/idl/*_h.h
 /include/config.h.in*
 /include/stamp*
 /cli/copenapi-cli

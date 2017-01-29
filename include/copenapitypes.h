@@ -93,6 +93,7 @@ typedef struct _REST_API_ENDPOINT_
 
 typedef struct _REST_API_MODULE_
 {
+    char *pszDefaultName;
     char *pszName;
     char *pszDescription;
     PREST_API_ENDPOINT pEndPoints;
@@ -101,6 +102,7 @@ typedef struct _REST_API_MODULE_
 
 typedef struct _REST_API_DEF_
 {
+    int nNoModules;
     char *pszHost;
     char *pszBasePath;
     PREST_API_MODULE pModules;

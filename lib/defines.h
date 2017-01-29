@@ -17,3 +17,4 @@
 #define MAX_HTTP_DATA_LEN 4094
 
 #define URL_SEPARATOR '/'
+#define DEFAULT_BASE_PATH "api"

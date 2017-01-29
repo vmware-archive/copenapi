@@ -36,8 +36,7 @@ coapi_load_modules(
     pTags = json_object_get(pRoot, "tags");
     if(!pTags)
     {
-        fprintf(stderr, "tags not found in api def\n");
-        dwError = EINVAL;
+        dwError = ENODATA;
         BAIL_ON_ERROR(dwError);
     }
 
@@ -175,7 +174,12 @@ coapi_load_endpoints(
             BAIL_ON_ERROR(dwError);
 
             pRestMethod->nMethod = nMethod;
+
             dwError = coapi_load_parameters(pMethod, &pRestMethod->pParams);
+            if(dwError == ENODATA)
+            {
+                dwError = 0;//allow no params
+            }
             BAIL_ON_ERROR(dwError);
 
             pEndPoint->pMethods[nMethod] = pRestMethod;
@@ -185,14 +189,13 @@ coapi_load_endpoints(
             {
                 //find the module tagged
                 dwError = coapi_find_tagged_module(pMethod, pApiModules, &pModule);
+                if(dwError == ENODATA)
+                {
+                    pModule = pApiModules;
+                    dwError = 0;
+                }
                 BAIL_ON_ERROR(dwError);
             }
-        }
-        if(!pModule)
-        {
-            fprintf(stderr, "module not found\n");
-            dwError = EINVAL;
-            BAIL_ON_ERROR(dwError);
         }
         dwError = coapi_module_add_endpoint(pModule, pEndPoint);
         BAIL_ON_ERROR(dwError);
@@ -289,8 +292,7 @@ coapi_load_parameters(
     pJsonParams = json_object_get(pMethod, "parameters");
     if(!pJsonParams)
     {
-        fprintf(stderr, "parameters not found for method");
-        dwError = ENOENT;
+        dwError = ENODATA;
         BAIL_ON_ERROR(dwError);
     }
 
@@ -418,8 +420,7 @@ coapi_find_tagged_module(
     pTags = json_object_get(pPath, "tags");
     if(!pTags)
     {
-        fprintf(stderr, "tags not found under path\n");
-        dwError = ENOENT;
+        dwError = ENODATA;
         BAIL_ON_ERROR(dwError);
     }
 
@@ -434,7 +435,7 @@ coapi_find_tagged_module(
     if(nTagEntries < 1)
     {
         fprintf(stderr, "there are no tag entries for this end point\n");
-        dwError = ENOENT;
+        dwError = ENODATA;
         BAIL_ON_ERROR(dwError);
     }
     else if(nTagEntries > 1)
@@ -499,7 +500,7 @@ coapi_find_module_by_name(
 
     if(!pModule)
     {
-        dwError = ENOENT;
+        dwError = ENODATA;
         BAIL_ON_ERROR(dwError);
     }
 
@@ -512,6 +513,46 @@ error:
     {
         *ppModule = NULL;
     }
+    goto cleanup;
+}
+
+uint32_t
+coapi_add_default_module(
+    const char *pszModuleName,
+    PREST_API_MODULE *ppApiModules
+    )
+{
+    uint32_t dwError = 0;
+    PREST_API_MODULE pApiModule = NULL;
+
+    if(IsNullOrEmptyString(pszModuleName) || !ppApiModules)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    dwError = coapi_allocate_memory(sizeof(REST_API_MODULE),
+                                        (void **)&pApiModule);
+    BAIL_ON_ERROR(dwError);
+
+    dwError = coapi_allocate_string(pszModuleName, &pApiModule->pszName);
+    BAIL_ON_ERROR(dwError);
+    dwError = coapi_allocate_string(
+                      "default module",
+                      &pApiModule->pszDescription);
+    BAIL_ON_ERROR(dwError);
+
+    *ppApiModules = pApiModule;
+
+cleanup:
+    return dwError;
+
+error:
+    if(ppApiModules)
+    {
+        *ppApiModules = NULL;
+    }
+    coapi_free_api_module(pApiModule);
     goto cleanup;
 }
 
@@ -1055,7 +1096,7 @@ coapi_map_api_impl(
         dwError = coapi_find_module_by_name(pRegMap->pszName,
                                       pApiDef->pModules,
                                       &pModule);
-        if(dwError == ENOENT)
+        if(dwError == ENODATA)
         {
             fprintf(stdout, "No api spec for module: %s\n", pRegMap->pszName);
             dwError = 0;

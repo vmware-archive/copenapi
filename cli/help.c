@@ -93,7 +93,16 @@ show_modules(
         BAIL_ON_ERROR(dwError);
     }
 
-    fprintf(stdout, "The following modules are supported.\n");
+    if(pApiDef->nNoModules)
+    {
+        fprintf(stdout, "COpenAPI maps tags in api spec to modules.\n");
+        fprintf(stdout, "Did not find tags for this api spec.\n");
+        fprintf(stdout, "base path is mapped as the default module.\n");
+    }
+    else
+    {
+        fprintf(stdout, "The following modules are supported.\n");
+    }
 
     pModule = pApiDef->pModules;
     while(pModule)

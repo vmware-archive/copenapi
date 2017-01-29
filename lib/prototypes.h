@@ -75,6 +75,12 @@ coapi_module_add_endpoint(
     PREST_API_ENDPOINT pEndPoint
     );
 
+uint32_t
+coapi_add_default_module(
+    const char *pszModuleName,
+    PREST_API_MODULE *ppApiModules
+    );
+
 void
 coapi_free_api_param(
     PREST_API_PARAM pParam

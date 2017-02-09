@@ -38,8 +38,8 @@ typedef enum _RESTPARAMTYPE_
 
 typedef uint32_t
 (*PFN_MODULE_ENDPOINT_CB)(
-     const char *pszJsonIn,
-     char **pszJsonOut
+     void *pIn,
+     void **pOut
     );
 
 typedef struct _REST_MODULE_ *PREST_MODULE;

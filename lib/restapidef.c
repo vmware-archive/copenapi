@@ -1021,6 +1021,10 @@ coapi_get_rest_method(
     {
         nMethod = METHOD_GET;
     }
+    else if(!strcasecmp(pszMethod, "patch"))
+    {
+        nMethod = METHOD_PATCH;
+    }
     else if(!strcasecmp(pszMethod, "post"))
     {
         nMethod = METHOD_POST;

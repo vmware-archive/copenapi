@@ -36,6 +36,15 @@ coapi_load_from_string(
     dwError = coapi_allocate_memory(sizeof(REST_API_DEF), (void **)&pApiDef);
     BAIL_ON_ERROR(dwError);
 
+    dwError = coapi_load_secure_scheme(pRoot, &pApiDef->nHasSecureScheme);
+    //default to https if not specified
+    if(dwError == ENODATA)
+    {
+        dwError = 0;
+        pApiDef->nHasSecureScheme = 1;
+    }
+    BAIL_ON_ERROR(dwError);
+
     dwError = json_get_string_value(pRoot, "host", &pApiDef->pszHost);
     BAIL_ON_ERROR(dwError);
 

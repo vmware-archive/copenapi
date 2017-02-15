@@ -17,7 +17,7 @@ json format.
 ### Build & Run
 
 1. autoreconf -mif && ./configure && make
-2. cmd line client - run cli/coapi_cli --apispec <openapi spec.json>
+2. cmd line client - run cli/copenapi_cli --apispec <openapi spec.json>
 3. library - see documentation below
 
 ## Documentation

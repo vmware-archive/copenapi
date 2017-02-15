@@ -103,6 +103,7 @@ typedef struct _REST_API_MODULE_
 typedef struct _REST_API_DEF_
 {
     int nNoModules;
+    int nHasSecureScheme;
     char *pszHost;
     char *pszBasePath;
     PREST_API_MODULE pModules;

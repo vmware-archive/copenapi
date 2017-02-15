@@ -307,7 +307,8 @@ rest_exec(
 
     dwError = coapi_allocate_string_printf(
                   &pszUrl,
-                  "http://%s%s%s%s",
+                  "%s://%s%s%s%s",
+                  pApiDef->nHasSecureScheme ? "https" : "http",
                   pApiDef->pszHost,
                   pEndPoint->pszName,
                   pszParams ? "?" : "",

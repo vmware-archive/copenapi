@@ -70,6 +70,12 @@ coapi_load_parameters(
     );
 
 uint32_t
+coapi_load_secure_scheme(
+    json_t *pRoot,
+    int *pnHasSecure
+    );
+
+uint32_t
 coapi_module_add_endpoint(
     PREST_API_MODULE pModule,
     PREST_API_ENDPOINT pEndPoint

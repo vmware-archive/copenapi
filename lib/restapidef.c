@@ -361,6 +361,65 @@ error:
 }
 
 uint32_t
+coapi_load_secure_scheme(
+    json_t *pRoot,
+    int *pnHasSecureScheme
+    )
+{
+    uint32_t dwError = 0;
+    json_t *pSchemes = NULL;
+    json_t *pScheme = NULL;
+    int i = 0;
+    int nHasSecureScheme = 0;
+
+    if(!pRoot || !pnHasSecureScheme)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    pSchemes = json_object_get(pRoot, "schemes");
+    if(!pSchemes)
+    {
+        dwError = ENODATA;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    if(!json_is_array(pSchemes))
+    {
+        fprintf(stderr, "schemes is not a json array\n");
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    json_array_foreach(pSchemes, i, pScheme)
+    {
+        const char *pszScheme = json_string_value(pScheme);
+        if(IsNullOrEmptyString(pszScheme))
+        {
+            dwError = EINVAL;
+            BAIL_ON_ERROR(dwError);
+        }
+        if(!strcasecmp("https", pszScheme))
+        {
+            nHasSecureScheme = 1;
+            break;
+        }
+    }
+
+    *pnHasSecureScheme = nHasSecureScheme;
+cleanup:
+    return dwError;
+
+error:
+    if(pnHasSecureScheme)
+    {
+        *pnHasSecureScheme = 0;
+    }
+    goto cleanup;
+}
+
+uint32_t
 coapi_module_add_endpoint(
     PREST_API_MODULE pModule,
     PREST_API_ENDPOINT pEndPoint

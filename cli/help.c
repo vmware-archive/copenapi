@@ -262,7 +262,7 @@ show_method(
     {
         int nMethodIndex = 0;
         fprintf(stdout, "\n");
-        fprintf(stdout, "Name : %s\n", ppMatchingEndPoints[i]->pszName);
+        fprintf(stdout, "Name : %s\n", ppMatchingEndPoints[i]->pszActualName);
         fprintf(stdout, "\n");
         for(nMethodIndex = 0; nMethodIndex < METHOD_COUNT; ++nMethodIndex)
         {

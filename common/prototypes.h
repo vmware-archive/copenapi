@@ -51,6 +51,14 @@ rtrim(
     const char *pszEnd
     );
 
+uint32_t
+string_replace(
+    const char *pszString,
+    const char *pszFind,
+    const char *pszReplace,
+    char **ppszResult
+    );
+
 //configreader.c
 void
 print_config_data(

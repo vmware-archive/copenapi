@@ -155,10 +155,10 @@ get_method_spec(
             pEndPoints = pModule->pEndPoints;
             while(pEndPoints)
             {
-                char *pszFind = strstr(pEndPoints->pszName, pszCmd);
+                char *pszFind = strstr(pEndPoints->pszActualName, pszCmd);
                 if(pszFind && !strcasecmp(pszFind, pszCmd))
                 {
-                    fprintf(stdout, "%s\n", pEndPoints->pszName);
+                    fprintf(stdout, "%s\n", pEndPoints->pszActualName);
                 }
                 pEndPoints = pEndPoints->pNext;
             }
@@ -181,10 +181,47 @@ error:
 }
 
 uint32_t
-get_query_string(
+replace_path(
+    const char *pszEndpointIn,
+    PPARAM pParam,
+    char **ppszEndpoint
+    )
+{
+    uint32_t dwError = 0;
+    char *pszEndpoint = NULL;
+    char *pszPath = NULL;
+
+    dwError = coapi_allocate_string_printf(&pszPath, "{%s}", pParam->pszName);
+    BAIL_ON_ERROR(dwError);
+
+    dwError = string_replace(
+                  pszEndpointIn,
+                  pszPath,
+                  pParam->pszValue,
+                  &pszEndpoint);
+    BAIL_ON_ERROR(dwError);
+
+    *ppszEndpoint = pszEndpoint;
+cleanup:
+    SAFE_FREE_MEMORY(pszPath);
+    return dwError;
+
+error:
+    if(ppszEndpoint)
+    {
+        *ppszEndpoint = NULL;
+    }
+    SAFE_FREE_MEMORY(pszEndpoint);
+    goto cleanup;
+}
+
+
+uint32_t
+get_path_and_query(
     PPARSE_CONTEXT pContext,
     PREST_API_PARAM pApiParams,
-    char **ppszQuery
+    const char *pszEndpointIn,
+    char **ppszEndpoint
     )
 {
     uint32_t dwError = 0;
@@ -194,50 +231,71 @@ get_query_string(
     char *pszQuery = NULL;
     char *pszTemp = NULL;
     char *pszKeyValue = NULL;
+    char *pszEndpoint = NULL;
+    char *pszEndpointTemp = NULL;
 
-    if(!pContext || !ppszQuery)
+    if(!pContext || IsNullOrEmptyString(pszEndpointIn) || !ppszEndpoint)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
     }
 
+    dwError = coapi_allocate_string(pszEndpointIn, &pszEndpointTemp);
+    BAIL_ON_ERROR(dwError);
+
     for(pApiParam = pApiParams; pApiParam; pApiParam = pApiParam->pNext)
     {
         const char *pszName = pApiParam->pszName;
+        int nPathParam = !strcmp(pApiParam->pszIn, "path");
 
         dwError = get_param_by_name(pContext, pszName, &pParam);
         if(dwError == ENOENT)
         {
-            if(!pApiParam->nRequired)
+            //path params are automatically required.
+            if(!pApiParam->nRequired || !nPathParam)
             {
+                dwError = 0;
                 continue;
             }
             fprintf(stderr, "please provide required param --%s\n", pszName);
+            dwError = EINVAL;
         }
         BAIL_ON_ERROR(dwError);
+
         if(IsNullOrEmptyString(pParam->pszValue))
         {
             fprintf(stderr, "value required for param --%s\n", pszName);
             dwError = ENOENT;
             BAIL_ON_ERROR(dwError);
         }
+        if(nPathParam)
+        {
+            dwError = replace_path(pszEndpointTemp, pParam, &pszEndpoint);
+            BAIL_ON_ERROR(dwError);
 
-        dwError = coapi_allocate_string_printf(
-                      &pszKeyValue,
-                      "%s=%s",
-                      pParam->pszName,
-                      pParam->pszValue);
-        BAIL_ON_ERROR(dwError);
+            SAFE_FREE_MEMORY(pszEndpointTemp);
+            pszEndpointTemp = pszEndpoint;
+            pszEndpoint = NULL;
+        }
+        else
+        {
+            dwError = coapi_allocate_string_printf(
+                          &pszKeyValue,
+                          "%s=%s",
+                          pParam->pszName,
+                          pParam->pszValue);
+            BAIL_ON_ERROR(dwError);
 
-        pszTemp = pszQuery;
-        pszQuery = NULL;
-        dwError = coapi_allocate_string_printf(
-                      &pszQuery,
-                      "%s%s%s",
-                      pszTemp ? pszTemp : "",
-                      pszKeyValue,
-                      pszQuery ? "&" : "");
-        BAIL_ON_ERROR(dwError);
+            pszTemp = pszQuery;
+            pszQuery = NULL;
+            dwError = coapi_allocate_string_printf(
+                          &pszQuery,
+                          "%s%s%s",
+                          pszTemp ? pszTemp : "",
+                          pszKeyValue,
+                          pszQuery ? "&" : "");
+            BAIL_ON_ERROR(dwError);
+        }
 
         SAFE_FREE_MEMORY(pszKeyValue);
         SAFE_FREE_MEMORY(pszTemp);
@@ -245,18 +303,28 @@ get_query_string(
         pszTemp = NULL;
     }
 
-    *ppszQuery = pszQuery;
+    dwError = coapi_allocate_string_printf(
+                  &pszEndpoint,
+                  "%s%s%s",
+                  pszEndpointTemp,
+                  pszQuery ? "?" : "",
+                  pszQuery ? pszQuery : "");
+    BAIL_ON_ERROR(dwError);
+
+    *ppszEndpoint = pszEndpoint;
 cleanup:
+    SAFE_FREE_MEMORY(pszEndpointTemp);
+    SAFE_FREE_MEMORY(pszQuery);
     SAFE_FREE_MEMORY(pszKeyValue);
     SAFE_FREE_MEMORY(pszTemp);
     return dwError;
 
 error:
-    if(ppszQuery)
+    if(ppszEndpoint)
     {
-        *ppszQuery = NULL;
+        *ppszEndpoint = NULL;
     }
-    SAFE_FREE_MEMORY(pszQuery);
+    SAFE_FREE_MEMORY(pszEndpoint);
     goto cleanup;
 }
 
@@ -269,10 +337,9 @@ rest_exec(
     uint32_t dwError = 0;
     PREST_API_METHOD pMethod = NULL;
     char *pszUrl = NULL;
-    char *pszEndPoint = NULL;
+    char *pszEndpoint = NULL;
     RESTMETHOD nMethod = METHOD_GET;
     PREST_API_ENDPOINT pEndPoint = NULL;
-    char *pszParams = NULL;
 
     if(!pApiDef || !pContext)
     {
@@ -298,7 +365,11 @@ rest_exec(
         BAIL_ON_ERROR(dwError);
     }
 
-    dwError = get_query_string(pContext, pMethod->pParams, &pszParams);
+    dwError = get_path_and_query(
+                  pContext,
+                  pMethod->pParams,
+                  pEndPoint->pszActualName,
+                  &pszEndpoint);
     if(dwError == ENOENT)
     {
         dwError = 0;
@@ -307,21 +378,18 @@ rest_exec(
 
     dwError = coapi_allocate_string_printf(
                   &pszUrl,
-                  "%s://%s%s%s%s",
+                  "%s://%s%s",
                   pApiDef->nHasSecureScheme ? "https" : "http",
                   pApiDef->pszHost,
-                  pEndPoint->pszName,
-                  pszParams ? "?" : "",
-                  pszParams ? pszParams : "");
+                  pszEndpoint ? pszEndpoint : pEndPoint->pszActualName);
     BAIL_ON_ERROR(dwError);
 
     dwError = call_rest_method(pszUrl, pMethod, pContext->nVerbose);
     BAIL_ON_ERROR(dwError);
 
 cleanup:
-    SAFE_FREE_MEMORY(pszParams);
     SAFE_FREE_MEMORY(pszUrl);
-    SAFE_FREE_MEMORY(pszEndPoint);
+    SAFE_FREE_MEMORY(pszEndpoint);
     return dwError;
 
 error:

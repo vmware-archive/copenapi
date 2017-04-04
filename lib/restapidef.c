@@ -86,6 +86,81 @@ error:
 }
 
 uint32_t
+coapi_replace_endpoint_path(
+    const char *pszActualName,
+    PREST_API_PARAM pApiParams,
+    char **ppszName
+    )
+{
+    uint32_t dwError = 0;
+    char *pszName = NULL;
+    char *pszNameTemp = NULL;
+    char *pszPath = NULL;
+    PREST_API_PARAM pApiParam = NULL;
+
+    if(IsNullOrEmptyString(pszActualName) || !ppszName)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    for(pApiParam = pApiParams; pApiParam; pApiParam = pApiParam->pNext)
+    {
+        if(strcmp(pApiParam->pszIn, "path"))
+        {
+            continue;
+        }
+
+        dwError = coapi_allocate_string_printf(
+                      &pszPath,
+                      "{%s}",
+                      pApiParam->pszName);
+        BAIL_ON_ERROR(dwError);
+
+        dwError = string_replace(
+                      pszActualName,
+                      pszPath,
+                      "*",
+                      &pszNameTemp);
+        if(dwError == ENOENT)
+        {
+            fprintf(stderr,
+                    "path '%s' specified with bad path string: %s\n",
+                    pApiParam->pszName,
+                    pszActualName);
+        }
+        BAIL_ON_ERROR(dwError);
+
+        SAFE_FREE_MEMORY(pszName);
+        pszName = pszNameTemp;
+        pszNameTemp = NULL;
+
+        SAFE_FREE_MEMORY(pszPath);
+        pszPath = NULL;
+    }
+
+    if(!pszName)
+    {
+        dwError = coapi_allocate_string(pszActualName, &pszName);
+        BAIL_ON_ERROR(dwError);
+    }
+
+    *ppszName = pszName;
+cleanup:
+    SAFE_FREE_MEMORY(pszNameTemp);
+    SAFE_FREE_MEMORY(pszPath);
+    return dwError;
+
+error:
+    if(ppszName)
+    {
+        *ppszName = NULL;
+    }
+    SAFE_FREE_MEMORY(pszName);
+    goto cleanup;
+}
+
+uint32_t
 coapi_load_endpoints(
     json_t *pRoot,
     const char *pszBasePath,
@@ -131,7 +206,7 @@ coapi_load_endpoints(
                                         &pEndPoint->pszCommandName);
         BAIL_ON_ERROR(dwError);
 
-        dwError = coapi_allocate_string_printf(&pEndPoint->pszName,
+        dwError = coapi_allocate_string_printf(&pEndPoint->pszActualName,
                                                "%s%s",
                                                pszBasePath,
                                                pszKey);
@@ -182,6 +257,18 @@ coapi_load_endpoints(
             }
             BAIL_ON_ERROR(dwError);
 
+            if(IsNullOrEmptyString(pEndPoint->pszName))
+            {
+                dwError = coapi_replace_endpoint_path(
+                              pEndPoint->pszActualName,
+                              pRestMethod->pParams,
+                              &pEndPoint->pszName);
+                BAIL_ON_ERROR(dwError);
+
+                pEndPoint->nHasPathSubs = strcmp(pEndPoint->pszActualName,
+                                                 pEndPoint->pszName) != 0;
+            }
+
             pEndPoint->pMethods[nMethod] = pRestMethod;
             pRestMethod = NULL;
 
@@ -197,6 +284,7 @@ coapi_load_endpoints(
                 BAIL_ON_ERROR(dwError);
             }
         }
+
         dwError = coapi_module_add_endpoint(pModule, pEndPoint);
         BAIL_ON_ERROR(dwError);
     }
@@ -310,12 +398,24 @@ coapi_load_parameters(
                                             &pParam->pszName);
             BAIL_ON_ERROR(dwError);
         }
+        else
+        {
+            fprintf(stderr, "parameter: missing required field - name\n");
+            dwError = EINVAL;
+            BAIL_ON_ERROR(dwError);
+        }
 
         pTemp = json_object_get(pJsonParam, "in");
         if(pTemp)
         {
             dwError = coapi_allocate_string(json_string_value(pTemp),
                                             &pParam->pszIn);
+            BAIL_ON_ERROR(dwError);
+        }
+        else
+        {
+            fprintf(stderr, "parameter: missing required field - in\n");
+            dwError = EINVAL;
             BAIL_ON_ERROR(dwError);
         }
 
@@ -638,6 +738,17 @@ coapi_find_endpoint_by_name(
             pEndPoint = pEndPoints;
             break;
         }
+        if(pEndPoints->nHasPathSubs)
+        {
+            //Maybe provide config to match with FNM_PATHNAME
+            //cant make it default because
+            //{path} to /path1/path2 will not match because of the "/"
+            if(!fnmatch(pEndPoints->pszName, pszName, 0))
+            {
+                pEndPoint = pEndPoints;
+                break;
+            }
+        }
         pEndPoints = pEndPoints->pNext;
     }
 
@@ -915,7 +1026,6 @@ coapi_find_method(
         {
             break;
         }
-        
         pModule = pModule->pNext;
     }
 
@@ -947,7 +1057,6 @@ error:
     }
     goto cleanup;
 }
-    
 
 uint32_t
 coapi_get_rest_type(
@@ -1042,7 +1151,7 @@ coapi_get_rest_method_string(
             pszTemp = "patch";
         break;
         default:
-            dwError = ENOENT; 
+            dwError = ENOENT;
             BAIL_ON_ERROR(dwError);
     }
 
@@ -1130,7 +1239,15 @@ coapi_print_api_def(
         pEndPoint = pModules->pEndPoints;
         while(pEndPoint)
         {
-            printf("\tEndPoint = %s\n", pEndPoint->pszName);
+            if(pEndPoint->nHasPathSubs)
+            {
+                printf("\tEndPoint Actual = %s\n", pEndPoint->pszActualName);
+                printf("\tEndPoint Registered = %s\n", pEndPoint->pszName);
+            }
+            else
+            {
+                printf("\tEndPoint = %s\n", pEndPoint->pszActualName);
+            }
             pEndPoint = pEndPoint->pNext;
         }
         pModules = pModules->pNext;
@@ -1306,6 +1423,7 @@ coapi_free_api_endpoint(
                 coapi_free_api_method(pEndPoint->pMethods[i]);
             }
         }
+        SAFE_FREE_MEMORY(pEndPoint->pszActualName);
         SAFE_FREE_MEMORY(pEndPoint->pszName);
         SAFE_FREE_MEMORY(pEndPoint->pszCommandName);
         pEndPoint = pEndPoint->pNext;

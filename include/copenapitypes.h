@@ -85,7 +85,9 @@ typedef struct _REST_API_METHOD_
 
 typedef struct _REST_API_ENDPOINT_
 {
+    int nHasPathSubs;
     char *pszName;
+    char *pszActualName;
     char *pszCommandName;
     PREST_API_METHOD pMethods[METHOD_COUNT];
     struct _REST_API_ENDPOINT_ *pNext;

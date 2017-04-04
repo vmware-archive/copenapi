@@ -20,6 +20,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fnmatch.h>
 #include <jansson.h>
 
 #include <copenapi.h>

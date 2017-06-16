@@ -14,6 +14,27 @@
 
 #include "includes.h"
 
+void
+show_util_help(
+    )
+{
+    printf("usage: copenapi-cli [options] COMMAND [command options]\n");
+    printf("\n");
+
+    printf("options    [--apispec - specify path to apispec to load.]\n");
+    printf("           [--baseurl - server url including port]\n");
+    printf("           [-k --insecure - bypass certificate verification.]\n");
+    printf("           [-n --netrc - read user/pass from .netrc file in user's home]\n");
+    printf("           [-u --user - user name. prompts for password.]\n");
+    printf("           [-v --verbose - print detailed debug output]\n");
+    printf("           [-h --help - print this message]\n");
+    printf("\n");
+    printf("\n");
+    printf("To see a list of available modules or end points loaded from apispec,\n");
+    printf("invoke without params or with just --apispec param.\n");
+    printf("\n");
+}
+
 uint32_t
 show_help(
     PCMD_ARGS pArgs,
@@ -76,6 +97,7 @@ cleanup:
     return dwError;
 
 error:
+    show_util_help();
     goto cleanup;
 }
 

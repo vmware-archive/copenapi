@@ -27,12 +27,19 @@ main(
     char **argvDup = NULL;
     char *pszDefaultApiSpec = NULL;
     const char *pszApiSpec = NULL;
+    char *pszPass = NULL;
 
     dwError = dup_argv(argc, argv, &argvDup);
     BAIL_ON_ERROR(dwError);
 
     dwError = parse_main_args(argc, argv, &pArgs);
     BAIL_ON_ERROR(dwError);
+
+    if(argc == 2 && pArgs->nHelp)
+    {
+        show_util_help();
+        goto cleanup;
+    }
 
     pszApiSpec = pArgs->pszApiSpec;
 
@@ -58,18 +65,34 @@ main(
     BAIL_ON_ERROR(dwError);
 
     pContext->parseState = PARSE_STATE_BEGIN;
-    pContext->nVerbose = pArgs->nVerbose;
 
     dwError = params_parse(argc, (const char **)argvDup, pContext);
     BAIL_ON_ERROR(dwError);
 
+    if(!pArgs->nNetrc && !IsNullOrEmptyString(pArgs->pszUser))
+    {
+        fprintf(stdout, "Password: ");
+
+        dwError = read_password_no_echo(&pszPass);
+        fprintf(stdout, "\n");
+        BAIL_ON_ERROR(dwError);
+
+        dwError = coapi_allocate_string_printf(
+                      &pArgs->pszUserPass,
+                      "%s:%s",
+                      pArgs->pszUser,
+                      pszPass);
+        BAIL_ON_ERROR(dwError);
+    }
+
     dwError = curl_global_init(CURL_GLOBAL_ALL);
     BAIL_ON_ERROR(dwError);
 
-    dwError = rest_exec(pApiDef, pContext);
+    dwError = rest_exec(pApiDef, pArgs, pContext);
     BAIL_ON_ERROR(dwError);
 
 cleanup:
+    SAFE_FREE_MEMORY(pszPass);
     SAFE_FREE_MEMORY(pszDefaultApiSpec);
     curl_global_cleanup();
     if(argvDup)

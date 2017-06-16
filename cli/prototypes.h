@@ -17,10 +17,15 @@
 uint32_t
 rest_exec(
     PREST_API_DEF pApiDef,
+    PCMD_ARGS pArgs,
     PPARSE_CONTEXT pContext
     );
 
 //help.c
+void
+show_util_help(
+    );
+
 uint32_t
 show_help(
     PCMD_ARGS pArgs,

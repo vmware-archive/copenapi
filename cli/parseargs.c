@@ -19,9 +19,13 @@ static CMD_ARGS _main_opt = {0};
 //options - 
 static struct option _pstMainOptions[] =
 {
-    {"help",                no_argument, &_main_opt.nHelp, 'h'},
-    {"verbose",             no_argument, &_main_opt.nVerbose, 'v'},
-    {"apispec",             required_argument, 0, 0},
+    {OPT_HELP,     no_argument, &_main_opt.nHelp, 'h'},
+    {OPT_VERBOSE,  no_argument, &_main_opt.nVerbose, 'v'},
+    {OPT_INSECURE, no_argument, &_main_opt.nInsecure, 'k'},
+    {OPT_APISPEC,  required_argument, 0, 'a'},
+    {OPT_USER,     required_argument, 0, 'u'},
+    {OPT_BASEURL,  required_argument, 0, 'b'},
+    {OPT_NETRC,    no_argument, &_main_opt.nNetrc, 'n'},
     {0, 0, 0, 0}
 };
 
@@ -54,7 +58,7 @@ parse_main_args(
         nOption = getopt_long (
                       argc,
                       argv,
-                      "hv",
+                      "a:b:hknu:v",
                       _pstMainOptions,
                       &nOptionIndex);
         if (nOption == -1)
@@ -69,8 +73,35 @@ parse_main_args(
                               pCmdArgs);
                 BAIL_ON_ERROR(dwError);
                 break;
+            case 'a':
+                dwError = parse_option(
+                              OPT_APISPEC,
+                              optarg,
+                              pCmdArgs);
+                BAIL_ON_ERROR(dwError);
+            break;
+            case 'b':
+                dwError = parse_option(
+                              OPT_BASEURL,
+                              optarg,
+                              pCmdArgs);
+                BAIL_ON_ERROR(dwError);
+            break;
             case 'h':
                 _main_opt.nHelp = 1;
+            break;
+            case 'k':
+                _main_opt.nInsecure = 1;
+            break;
+            case 'n':
+                _main_opt.nNetrc = 1;
+            break;
+            case 'u':
+                dwError = parse_option(
+                              OPT_USER,
+                              optarg,
+                              pCmdArgs);
+                BAIL_ON_ERROR(dwError);
             break;
             case 'v':
                 _main_opt.nVerbose = 1;
@@ -83,7 +114,9 @@ parse_main_args(
     }
 
     pCmdArgs->nHelp = _main_opt.nHelp;
+    pCmdArgs->nInsecure = _main_opt.nInsecure;
     pCmdArgs->nVerbose = _main_opt.nVerbose;
+    pCmdArgs->nNetrc = _main_opt.nNetrc;
 
     dwError = collect_extra_args(optind,
                                  argc,
@@ -184,11 +217,25 @@ parse_option(
         BAIL_ON_ERROR(dwError);
     }
 
-    if(!strcasecmp(pszName, "apispec"))
+    if(!strcasecmp(pszName, OPT_APISPEC))
     {
         dwError = coapi_allocate_string(
                       pszArg,
                       &pCmdArgs->pszApiSpec);
+        BAIL_ON_ERROR(dwError);
+    }
+    else if(!strcasecmp(pszName, OPT_USER))
+    {
+        dwError = coapi_allocate_string(
+                      pszArg,
+                      &pCmdArgs->pszUser);
+        BAIL_ON_ERROR(dwError);
+    }
+    else if(!strcasecmp(pszName, OPT_BASEURL))
+    {
+        dwError = coapi_allocate_string(
+                      pszArg,
+                      &pCmdArgs->pszBaseUrl);
         BAIL_ON_ERROR(dwError);
     }
 cleanup:
@@ -207,6 +254,9 @@ free_cmd_args(
     if(pCmdArgs)
     {
         SAFE_FREE_MEMORY(pCmdArgs->pszApiSpec);
+        SAFE_FREE_MEMORY(pCmdArgs->pszUser);
+        SAFE_FREE_MEMORY(pCmdArgs->pszUserPass);
+        SAFE_FREE_MEMORY(pCmdArgs->pszBaseUrl);
         coapi_free_string_array_with_count(pCmdArgs->ppszCmds,
                                            pCmdArgs->nCmdCount);
     }

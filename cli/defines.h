@@ -24,6 +24,17 @@
 #define ERROR_COPENAPI_CLI_CURL_BASE   1300
 #define ERROR_COPENAPI_CLI_CURL_END    1400
 
+#define HTTP_OK  200
+
+//cmd line client options
+#define OPT_BASEURL  "baseurl"
+#define OPT_USER     "user"
+#define OPT_APISPEC  "apispec"
+#define OPT_VERBOSE  "verbose"
+#define OPT_INSECURE "insecure"
+#define OPT_NETRC    "netrc"
+#define OPT_HELP     "help"
+
 #define BAIL_ON_CURL_ERROR(dwError) \
     do {                                                           \
         if (dwError)                                               \

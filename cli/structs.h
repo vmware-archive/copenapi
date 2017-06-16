@@ -42,7 +42,6 @@ typedef enum _PARSE_STATE_
 
 typedef struct _PARSE_CONTEXT_
 {
-    int nVerbose;
     PARSE_STATE parseState;
     char *pszModule;
     char *pszCmd;
@@ -52,14 +51,16 @@ typedef struct _PARSE_CONTEXT_
 typedef struct _CMD_ARGS_
 {
     char *pszApiSpec;
-    char *pszServer;
+    char *pszBaseUrl;
     char *pszUser;
     char *pszDomain;
-    char *pszPass;
+    char *pszUserPass;
     char *pszSpn;
     int nCmdCount;
     int nHelp;
     int nVerbose;
+    int nInsecure;
+    int nNetrc;
     char **ppszCmds;
 }CMD_ARGS, *PCMD_ARGS;
 

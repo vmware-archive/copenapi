@@ -34,6 +34,7 @@
 #define OPT_INSECURE "insecure"
 #define OPT_NETRC    "netrc"
 #define OPT_HELP     "help"
+#define OPT_REQUEST  "request"
 
 #define BAIL_ON_CURL_ERROR(dwError) \
     do {                                                           \

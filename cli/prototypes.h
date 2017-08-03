@@ -15,10 +15,16 @@
 #pragma once
 //main.c
 uint32_t
+rest_get_cmd_params(
+    PREST_API_DEF pApiDef,
+    PREST_CMD_ARGS pRestCmdArgs
+    );
+
+uint32_t
 rest_exec(
     PREST_API_DEF pApiDef,
     PCMD_ARGS pArgs,
-    PPARSE_CONTEXT pContext
+    PREST_CMD_ARGS pRestCmdArgs
     );
 
 //help.c
@@ -76,6 +82,24 @@ free_cmd_args(
     PCMD_ARGS pCmdArgs
     );
 
+//parsecmdargs.c
+uint32_t
+parse_cmd_args(
+    int argc,
+    char **argv,
+    PREST_CMD_ARGS pRestCmdArgs
+    );
+
+void
+free_rest_cmd_params(
+    PREST_CMD_PARAM pParam
+    );
+
+void
+free_rest_cmd_args(
+    PREST_CMD_ARGS pRestCmdArgs
+    );
+
 //param.c
 uint32_t
 params_parse_string(
@@ -125,9 +149,9 @@ has_param(
 
 uint32_t
 get_param_by_name(
-    PPARSE_CONTEXT pContext,
+    PREST_CMD_ARGS pRestArgs,
     const char *pszName,
-    PPARAM *ppParam
+    PREST_CMD_PARAM *ppParam
     );
 
 void

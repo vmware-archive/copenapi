@@ -16,7 +16,7 @@
 
 static CMD_ARGS _main_opt = {0};
 
-//options - 
+//options -
 static struct option _pstMainOptions[] =
 {
     {OPT_HELP,     no_argument, &_main_opt.nHelp, 'h'},
@@ -26,6 +26,7 @@ static struct option _pstMainOptions[] =
     {OPT_USER,     required_argument, 0, 'u'},
     {OPT_BASEURL,  required_argument, 0, 'b'},
     {OPT_NETRC,    no_argument, &_main_opt.nNetrc, 'n'},
+    {OPT_REQUEST,  required_argument, 0, 'X'},
     {0, 0, 0, 0}
 };
 
@@ -51,6 +52,7 @@ parse_main_args(
                             sizeof(CMD_ARGS),
                             (void**)&pCmdArgs);
     BAIL_ON_ERROR(dwError);
+    pCmdArgs->nRestMethod = METHOD_GET;
 
     opterr = 0;//tell getopt to not print errors
     while (1)
@@ -58,7 +60,7 @@ parse_main_args(
         nOption = getopt_long (
                       argc,
                       argv,
-                      "a:b:hknu:v",
+                      "a:b:hknu:vX:",
                       _pstMainOptions,
                       &nOptionIndex);
         if (nOption == -1)
@@ -106,6 +108,13 @@ parse_main_args(
             case 'v':
                 _main_opt.nVerbose = 1;
             break;
+            case 'X':
+                dwError = parse_option(
+                              OPT_REQUEST,
+                              optarg,
+                              pCmdArgs);
+                BAIL_ON_ERROR(dwError);
+            break;
             case '?':
             break;
             default:
@@ -117,6 +126,7 @@ parse_main_args(
     pCmdArgs->nInsecure = _main_opt.nInsecure;
     pCmdArgs->nVerbose = _main_opt.nVerbose;
     pCmdArgs->nNetrc = _main_opt.nNetrc;
+    pCmdArgs->nCmdIndex = optind;
 
     dwError = collect_extra_args(optind,
                                  argc,
@@ -173,7 +183,7 @@ collect_extra_args(
         dwError = coapi_allocate_memory(nCmdCount * sizeof(char*),
                                         (void**)&ppszCmds);
         BAIL_ON_ERROR(dwError);
-        
+
         while (argIndex < argc)
         {
             dwError = coapi_allocate_string(argv[argIndex++],
@@ -236,6 +246,15 @@ parse_option(
         dwError = coapi_allocate_string(
                       pszArg,
                       &pCmdArgs->pszBaseUrl);
+        BAIL_ON_ERROR(dwError);
+    }
+    else if(!strcasecmp(pszName, OPT_REQUEST))
+    {
+        dwError = coapi_get_rest_method(pszArg, &pCmdArgs->nRestMethod);
+        if(dwError)
+        {
+            fprintf(stderr, "%s is not a valid method name\n", pszArg);
+        }
         BAIL_ON_ERROR(dwError);
     }
 cleanup:

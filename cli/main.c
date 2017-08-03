@@ -14,6 +14,56 @@
 
 #include "includes.h"
 
+uint32_t
+init_rest_cmd_args(
+    PCMD_ARGS pArgs,
+    PREST_API_DEF pApiDef,
+    PREST_CMD_ARGS *ppRestArgs
+    )
+{
+    uint32_t dwError = 0;
+    PREST_CMD_ARGS pRestArgs = NULL;
+
+    if(!pArgs || pArgs->nCmdCount < 2 || !pApiDef || !ppRestArgs)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    dwError = coapi_allocate_memory(
+                  sizeof(REST_CMD_ARGS),
+                  (void **)&pRestArgs);
+    BAIL_ON_ERROR(dwError);
+
+    pRestArgs->nRestMethod = pArgs->nRestMethod;
+
+    dwError = coapi_allocate_string(
+                  pArgs->ppszCmds[0],
+                  &pRestArgs->pszModule);
+    BAIL_ON_ERROR(dwError);
+
+    dwError = coapi_allocate_string(
+                  pArgs->ppszCmds[1],
+                  &pRestArgs->pszCmd);
+    BAIL_ON_ERROR(dwError);
+
+    //Gather params for the command specified
+    dwError = rest_get_cmd_params(pApiDef, pRestArgs);
+    BAIL_ON_ERROR(dwError);
+
+    *ppRestArgs = pRestArgs;
+cleanup:
+    return dwError;
+
+error:
+    if(ppRestArgs)
+    {
+        *ppRestArgs = NULL;
+    }
+    free_rest_cmd_args(pRestArgs);
+    goto cleanup;
+}
+
 int
 main(
     int argc,
@@ -22,7 +72,7 @@ main(
 {
     uint32_t dwError = 0;
     PREST_API_DEF pApiDef = NULL;
-    PPARSE_CONTEXT pContext = NULL;
+    PREST_CMD_ARGS pRestCmdArgs = NULL;
     PCMD_ARGS pArgs = NULL;
     char **argvDup = NULL;
     char *pszDefaultApiSpec = NULL;
@@ -60,14 +110,21 @@ main(
         goto cleanup;
     }
 
-    dwError = coapi_allocate_memory(sizeof(PARSE_CONTEXT),
-                                    (void **)&pContext);
+    //Must have a module and command to proceed now
+    if(pArgs->nCmdCount < 2)
+    {
+        show_help(pArgs, pApiDef);
+        goto cleanup;
+    }
+
+    dwError = init_rest_cmd_args(pArgs, pApiDef, &pRestCmdArgs);
     BAIL_ON_ERROR(dwError);
 
-    pContext->parseState = PARSE_STATE_BEGIN;
-
-    dwError = params_parse(argc, (const char **)argvDup, pContext);
-    BAIL_ON_ERROR(dwError);
+    if(pRestCmdArgs->nParamCount > 0)
+    {
+        dwError = parse_cmd_args(argc, argvDup, pRestCmdArgs);
+        BAIL_ON_ERROR(dwError);
+    }
 
     if(!pArgs->nNetrc && !IsNullOrEmptyString(pArgs->pszUser))
     {
@@ -88,7 +145,7 @@ main(
     dwError = curl_global_init(CURL_GLOBAL_ALL);
     BAIL_ON_ERROR(dwError);
 
-    dwError = rest_exec(pApiDef, pArgs, pContext);
+    dwError = rest_exec(pApiDef, pArgs, pRestCmdArgs);
     BAIL_ON_ERROR(dwError);
 
 cleanup:
@@ -107,7 +164,7 @@ cleanup:
     {
         coapi_free_api_def(pApiDef);
     }
-    free_parse_context(pContext);
+    free_rest_cmd_args(pRestCmdArgs);
     return dwError;
 
 error:

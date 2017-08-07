@@ -84,10 +84,11 @@ call_rest_method(
         dwError = curl_easy_setopt(pCurl, CURLOPT_URL, pszUrl);
         BAIL_ON_CURL_ERROR(dwError);
 
-        switch(pArgs->nRestMethod)
+        switch(pMethod->nMethod)
         {
             case METHOD_PUT:
-                dwError = curl_easy_setopt(pCurl, CURLOPT_UPLOAD, 1L);
+                dwError = curl_easy_setopt(pCurl, CURLOPT_CUSTOMREQUEST, "PUT");
+                dwError = curl_easy_setopt(pCurl, CURLOPT_POSTFIELDS, "");
                 break;
             case METHOD_POST:
                 dwError = curl_easy_setopt(pCurl, CURLOPT_POSTFIELDS, "");
@@ -114,7 +115,15 @@ call_rest_method(
 
         if(nStatus != HTTP_OK)
         {
-            fprintf(stderr, "Error: server returned %d\n", nStatus);
+            if(nStatus == 401)
+            {
+                fprintf(stderr,
+                        "Error: 401. Unauthorized. Specify user with --user or -u\n");
+            }
+            else
+            {
+                fprintf(stderr, "Error: server returned %d\n", nStatus);
+            }
             dwError = 1;
             BAIL_ON_ERROR(dwError);
         }
@@ -146,6 +155,7 @@ get_method_spec(
     PREST_API_ENDPOINT pEndpoints = NULL;
     PREST_API_ENDPOINT pEndpoint = NULL;
     int nPossibleMatches = 0;
+    int nExactMatches = 0;
 
     if(!pModules ||
        IsNullOrEmptyString(pszModule) ||
@@ -175,7 +185,16 @@ get_method_spec(
                 pEndpoint = pEndpoints;
                 break;
             }
-            else
+            else if(pEndpoints->pszName < pszFind && *(pszFind - 1) == '/')
+            {
+                pEndpoint = NULL;
+                if(!nExactMatches)
+                {
+                    pEndpoint = pEndpoints;
+                }
+                ++nExactMatches;
+            }
+            else if(!nExactMatches)
             {
                 if(!nPossibleMatches)
                 {
@@ -193,11 +212,35 @@ get_method_spec(
 
     if(!pEndpoint)
     {
-        if(nPossibleMatches)
+        if(nExactMatches)
         {
             fprintf(
                 stdout,
-                "%d commands match the search. Please specify command.\n",
+                "%d commands exactly match the search.\n"
+                "Please specify command. For eg. to resolve ambiguity between\n"
+                "ip/addr and ipv6/addr, you can specify ip/addr as the command.\n",
+                nExactMatches);
+            //show exact matches
+            pEndpoints = pModule->pEndPoints;
+            while(pEndpoints)
+            {
+                char *pszFind = strstr(pEndpoints->pszActualName, pszCmd);
+                if(pszFind && !strcasecmp(pszFind, pszCmd))
+                {
+                    if(pEndpoints->pszActualName < pszFind && *(pszFind - 1) == '/')
+                    {
+                        fprintf(stdout, "%s\n", pEndpoints->pszActualName);
+                    }
+                }
+                pEndpoints = pEndpoints->pNext;
+            }
+        }
+        else if(nPossibleMatches)
+        {
+            fprintf(
+                stdout,
+                "%d commands partially match the search.\n"
+                "Please specify command.\n",
                 nPossibleMatches);
             //show potential matches
             pEndpoints = pModule->pEndPoints;
@@ -212,6 +255,10 @@ get_method_spec(
             }
         }
         dwError = ENOENT;
+        if(nExactMatches || nPossibleMatches)
+        {
+            dwError = ENOTUNIQ;
+        }
         BAIL_ON_ERROR(dwError);
     }
 
@@ -360,6 +407,7 @@ rest_get_method(
     PREST_API_METHOD pMethod = NULL;
     PREST_API_ENDPOINT pEndpoint = NULL;
     RESTMETHOD nRestMethod = METHOD_GET;
+    char *pszMethods[] = {"GET", "PUT", "POST", "DELETE", "PATCH"};
 
     if(!pApiDef || !pRestArgs || !ppMethod)
     {
@@ -368,13 +416,6 @@ rest_get_method(
     }
 
     nRestMethod = pRestArgs->nRestMethod;
-
-    if(nRestMethod < METHOD_GET || nRestMethod > METHOD_PATCH)
-    {
-        fprintf(stderr, "bad method requested with -X or --request\n");
-        dwError = EINVAL;
-        BAIL_ON_ERROR(dwError);
-    }
 
     dwError = get_method_spec(
                   pApiDef->pModules,
@@ -391,12 +432,56 @@ rest_get_method(
     }
     BAIL_ON_ERROR(dwError);
 
-    pMethod = pEndpoint->pMethods[nRestMethod];
+    if(nRestMethod >= METHOD_GET && nRestMethod <= METHOD_PATCH)
+    {
+        pMethod = pEndpoint->pMethods[nRestMethod];
+        if(!pMethod)
+        {
+            fprintf(stderr,
+                    "%s method not found for command: %s\n",
+                    pszMethods[nRestMethod],
+                    pRestArgs->pszCmd);
+        }
+    }
+    else if(pEndpoint->pMethods[METHOD_GET])
+    {
+        pRestArgs->nRestMethod = METHOD_GET;
+        pMethod = pEndpoint->pMethods[METHOD_GET];
+    }
+    else
+    {
+        int i = 0;
+        int nCount = 0;
+        for(i = METHOD_GET; i < METHOD_COUNT; ++i)
+        {
+            if(pEndpoint->pMethods[i])
+            {
+                nRestMethod = i;
+                ++nCount;
+            }
+        }
+        if(nCount > 1)
+        {
+            fprintf(stdout,
+                    "Multiple methods found. Please specify with -X\n");
+
+            for(i = METHOD_GET; i < METHOD_COUNT; ++i)
+            {
+                if(pEndpoint->pMethods[i])
+                {
+                    fprintf(stdout, "-X %s\n", pszMethods[i]);
+                }
+            }
+        }
+        else if(nCount == 1)
+        {
+            pRestArgs->nRestMethod = nRestMethod;
+            pMethod = pEndpoint->pMethods[nRestMethod];
+        }
+    }
+
     if(!pMethod)
     {
-        fprintf(stderr,
-                "method not found for command: %s\n",
-                pRestArgs->pszCmd);
         dwError = ENOENT;
         BAIL_ON_ERROR(dwError);
     }

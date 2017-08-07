@@ -108,7 +108,10 @@ validate_options(
     {
         if(pParam->nRequired && IsNullOrEmptyString(pParam->pszValue))
         {
-            fprintf(stderr, "Parameter %s is required\n", pParam->pszName);
+            fprintf(stderr,
+                    "Parameter %s is required. Specify as --%s\n",
+                    pParam->pszName,
+                    pParam->pszName);
             dwError = EINVAL;
         }
     }

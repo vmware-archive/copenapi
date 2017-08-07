@@ -52,7 +52,7 @@ parse_main_args(
                             sizeof(CMD_ARGS),
                             (void**)&pCmdArgs);
     BAIL_ON_ERROR(dwError);
-    pCmdArgs->nRestMethod = METHOD_GET;
+    pCmdArgs->nRestMethod = METHOD_INVALID;
 
     opterr = 0;//tell getopt to not print errors
     while (1)

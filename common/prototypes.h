@@ -59,6 +59,11 @@ string_replace(
     char **ppszResult
     );
 
+uint32_t
+read_password_no_echo(
+    char **ppszPassword
+    );
+
 //configreader.c
 void
 print_config_data(

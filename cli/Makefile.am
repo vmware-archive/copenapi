@@ -7,8 +7,8 @@ copenapi_cli_CPPFLAGS = -I$(top_srcdir)/include
 copenapi_cli_SOURCES = \
     help.c \
     main.c \
-    param.c \
     parseargs.c \
+    parsecmdargs.c \
     restclient.c \
     utils.c
 

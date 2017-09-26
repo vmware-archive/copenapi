@@ -33,14 +33,15 @@ uint32_t
 call_rest_method(
     const char *pszUrl,
     PREST_API_METHOD pMethod,
-    int nVerbose
+    PCMD_ARGS pArgs
     )
 {
     uint32_t dwError = 0;
     CURL *pCurl = NULL;
     CURLcode res = CURLE_OK;
+    int nStatus = 0;
 
-    if(IsNullOrEmptyString(pszUrl) || !pMethod)
+    if(IsNullOrEmptyString(pszUrl) || !pMethod || !pArgs)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
@@ -49,7 +50,25 @@ call_rest_method(
     pCurl = curl_easy_init();
     if(pCurl)
     {
-        if(nVerbose)
+        //if netrc is specified, dont look for cmd line user/pass
+        if(pArgs->nNetrc)
+        {
+            dwError = curl_easy_setopt(pCurl, CURLOPT_NETRC, CURL_NETRC_REQUIRED);
+            BAIL_ON_CURL_ERROR(dwError);
+        }
+        else if(!IsNullOrEmptyString(pArgs->pszUserPass))
+        {
+            dwError = curl_easy_setopt(pCurl, CURLOPT_USERPWD, pArgs->pszUserPass);
+            BAIL_ON_CURL_ERROR(dwError);
+        }
+        if(pArgs->nInsecure)
+        {
+            dwError = curl_easy_setopt(pCurl, CURLOPT_SSL_VERIFYHOST, 0L);
+            BAIL_ON_CURL_ERROR(dwError);
+            dwError = curl_easy_setopt(pCurl, CURLOPT_SSL_VERIFYPEER, 0L);
+            BAIL_ON_CURL_ERROR(dwError);
+        }
+        if(pArgs->nVerbose)
         {
             fprintf(stdout, "URL: %s\n", pszUrl);
 
@@ -65,11 +84,49 @@ call_rest_method(
         dwError = curl_easy_setopt(pCurl, CURLOPT_URL, pszUrl);
         BAIL_ON_CURL_ERROR(dwError);
 
+        switch(pMethod->nMethod)
+        {
+            case METHOD_PUT:
+                dwError = curl_easy_setopt(pCurl, CURLOPT_CUSTOMREQUEST, "PUT");
+                dwError = curl_easy_setopt(pCurl, CURLOPT_POSTFIELDS, "");
+                break;
+            case METHOD_POST:
+                dwError = curl_easy_setopt(pCurl, CURLOPT_POSTFIELDS, "");
+                break;
+            case METHOD_DELETE:
+                dwError = curl_easy_setopt(pCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
+                break;
+            case METHOD_PATCH:
+                dwError = curl_easy_setopt(pCurl, CURLOPT_CUSTOMREQUEST, "PATCH");
+                break;
+            default:
+                break;
+            BAIL_ON_CURL_ERROR(dwError);
+        }
+
         dwError = curl_easy_setopt(pCurl, CURLOPT_WRITEFUNCTION, write_mem_cb);
         BAIL_ON_CURL_ERROR(dwError);
 
         dwError = curl_easy_perform(pCurl);
         BAIL_ON_CURL_ERROR(dwError);
+
+        dwError = curl_easy_getinfo(pCurl, CURLINFO_RESPONSE_CODE, &nStatus);
+        BAIL_ON_CURL_ERROR(dwError);
+
+        if(nStatus != HTTP_OK)
+        {
+            if(nStatus == 401)
+            {
+                fprintf(stderr,
+                        "Error: 401. Unauthorized. Specify user with --user or -u\n");
+            }
+            else
+            {
+                fprintf(stderr, "Error: server returned %d\n", nStatus);
+            }
+            dwError = 1;
+            BAIL_ON_ERROR(dwError);
+        }
     }
 
 cleanup:
@@ -90,19 +147,20 @@ get_method_spec(
     PREST_API_MODULE pModules,
     const char *pszModule,
     const char *pszCmd,
-    PREST_API_ENDPOINT *ppEndPoint
+    PREST_API_ENDPOINT *ppEndpoint
     )
 {
     uint32_t dwError = 0;
     PREST_API_MODULE pModule = NULL;
-    PREST_API_ENDPOINT pEndPoints = NULL;
-    PREST_API_ENDPOINT pEndPoint = NULL;
+    PREST_API_ENDPOINT pEndpoints = NULL;
+    PREST_API_ENDPOINT pEndpoint = NULL;
     int nPossibleMatches = 0;
+    int nExactMatches = 0;
 
     if(!pModules ||
        IsNullOrEmptyString(pszModule) ||
        IsNullOrEmptyString(pszCmd) ||
-       !ppEndPoint)
+       !ppEndpoint)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
@@ -114,68 +172,105 @@ get_method_spec(
                   &pModule);
     BAIL_ON_ERROR(dwError);
 
-    pEndPoints = pModule->pEndPoints;
-    while(pEndPoints)
+    pEndpoints = pModule->pEndPoints;
+    while(pEndpoints)
     {
-        char *pszFind = strstr(pEndPoints->pszName, pszCmd);
+        char *pszFind = strstr(pEndpoints->pszName, pszCmd);
         //must match at the end
         if(pszFind && !strcasecmp(pszFind, pszCmd))
         {
             //is this a full match? then we can stop here
-            if(!strcasecmp(pEndPoints->pszName, pszCmd))
+            if(!strcasecmp(pEndpoints->pszName, pszCmd))
             {
-                pEndPoint = pEndPoints;
+                pEndpoint = pEndpoints;
                 break;
             }
-            else
+            else if(pEndpoints->pszName < pszFind && *(pszFind - 1) == '/')
+            {
+                pEndpoint = NULL;
+                if(!nExactMatches)
+                {
+                    pEndpoint = pEndpoints;
+                }
+                ++nExactMatches;
+            }
+            else if(!nExactMatches)
             {
                 if(!nPossibleMatches)
                 {
-                    pEndPoint = pEndPoints;
+                    pEndpoint = pEndpoints;
                 }
                 else
                 {
-                    pEndPoint = NULL;
+                    pEndpoint = NULL;
                 }
                 ++nPossibleMatches;
             }
         }
-        pEndPoints = pEndPoints->pNext;
+        pEndpoints = pEndpoints->pNext;
     }
 
-    if(!pEndPoint)
+    if(!pEndpoint)
     {
-        if(nPossibleMatches)
+        if(nExactMatches)
         {
             fprintf(
                 stdout,
-                "%d commands match the search. Please specify command.\n",
-                nPossibleMatches);
-            //show potential matches
-            pEndPoints = pModule->pEndPoints;
-            while(pEndPoints)
+                "%d commands exactly match the search.\n"
+                "Please specify command. For eg. to resolve ambiguity between\n"
+                "ip/addr and ipv6/addr, you can specify ip/addr as the command.\n",
+                nExactMatches);
+            //show exact matches
+            pEndpoints = pModule->pEndPoints;
+            while(pEndpoints)
             {
-                char *pszFind = strstr(pEndPoints->pszActualName, pszCmd);
+                char *pszFind = strstr(pEndpoints->pszActualName, pszCmd);
                 if(pszFind && !strcasecmp(pszFind, pszCmd))
                 {
-                    fprintf(stdout, "%s\n", pEndPoints->pszActualName);
+                    if(pEndpoints->pszActualName < pszFind && *(pszFind - 1) == '/')
+                    {
+                        fprintf(stdout, "%s\n", pEndpoints->pszActualName);
+                    }
                 }
-                pEndPoints = pEndPoints->pNext;
+                pEndpoints = pEndpoints->pNext;
+            }
+        }
+        else if(nPossibleMatches)
+        {
+            fprintf(
+                stdout,
+                "%d commands partially match the search.\n"
+                "Please specify command.\n",
+                nPossibleMatches);
+            //show potential matches
+            pEndpoints = pModule->pEndPoints;
+            while(pEndpoints)
+            {
+                char *pszFind = strstr(pEndpoints->pszActualName, pszCmd);
+                if(pszFind && !strcasecmp(pszFind, pszCmd))
+                {
+                    fprintf(stdout, "%s\n", pEndpoints->pszActualName);
+                }
+                pEndpoints = pEndpoints->pNext;
             }
         }
         dwError = ENOENT;
+        if(nExactMatches || nPossibleMatches)
+        {
+            dwError = ENOTUNIQ;
+        }
         BAIL_ON_ERROR(dwError);
     }
 
-    *ppEndPoint = pEndPoint;
+    *ppEndpoint = pEndpoint;
 
 cleanup:
     return dwError;
 
 error:
-    if(ppEndPoint)
+    if(ppEndpoint)
     {
-        *ppEndPoint = NULL;
+        *ppEndpoint = NULL;
     }
     goto cleanup;
 }
@@ -215,87 +310,69 @@ error:
     goto cleanup;
 }
 
-
 uint32_t
-get_path_and_query(
-    PPARSE_CONTEXT pContext,
+get_query_string(
+    PREST_CMD_ARGS pRestArgs,
     PREST_API_PARAM pApiParams,
-    const char *pszEndpointIn,
-    char **ppszEndpoint
+    char **ppszQuery
     )
 {
     uint32_t dwError = 0;
     int i = 0;
-    PPARAM pParam = NULL;
+    PREST_CMD_PARAM pParam = NULL;
     PREST_API_PARAM pApiParam = NULL;
     char *pszQuery = NULL;
     char *pszTemp = NULL;
     char *pszKeyValue = NULL;
-    char *pszEndpoint = NULL;
-    char *pszEndpointTemp = NULL;
 
-    if(!pContext || IsNullOrEmptyString(pszEndpointIn) || !ppszEndpoint)
+    if(!pRestArgs || !ppszQuery)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
     }
 
-    dwError = coapi_allocate_string(pszEndpointIn, &pszEndpointTemp);
-    BAIL_ON_ERROR(dwError);
-
     for(pApiParam = pApiParams; pApiParam; pApiParam = pApiParam->pNext)
     {
         const char *pszName = pApiParam->pszName;
-        int nPathParam = !strcmp(pApiParam->pszIn, "path");
 
-        dwError = get_param_by_name(pContext, pszName, &pParam);
+        dwError = get_param_by_name(pRestArgs, pszName, &pParam);
         if(dwError == ENOENT)
         {
-            //path params are automatically required.
-            if(!pApiParam->nRequired || !nPathParam)
+            if(!pApiParam->nRequired)
             {
-                dwError = 0;
                 continue;
             }
             fprintf(stderr, "please provide required param --%s\n", pszName);
-            dwError = EINVAL;
         }
         BAIL_ON_ERROR(dwError);
 
         if(IsNullOrEmptyString(pParam->pszValue))
         {
-            fprintf(stderr, "value required for param --%s\n", pszName);
-            dwError = ENOENT;
-            BAIL_ON_ERROR(dwError);
+            if(pParam->nRequired)
+            {
+                fprintf(stderr, "value required for param --%s\n", pszName);
+                dwError = EINVAL;
+                BAIL_ON_ERROR(dwError);
+            }
+            continue;
         }
-        if(nPathParam)
-        {
-            dwError = replace_path(pszEndpointTemp, pParam, &pszEndpoint);
-            BAIL_ON_ERROR(dwError);
 
-            SAFE_FREE_MEMORY(pszEndpointTemp);
-            pszEndpointTemp = pszEndpoint;
-            pszEndpoint = NULL;
-        }
-        else
-        {
-            dwError = coapi_allocate_string_printf(
-                          &pszKeyValue,
-                          "%s=%s",
-                          pParam->pszName,
-                          pParam->pszValue);
-            BAIL_ON_ERROR(dwError);
+        dwError = coapi_allocate_string_printf(
+                      &pszKeyValue,
+                      "%s=%s",
+                      pParam->pszName,
+                      pParam->pszValue);
+        BAIL_ON_ERROR(dwError);
 
-            pszTemp = pszQuery;
-            pszQuery = NULL;
-            dwError = coapi_allocate_string_printf(
-                          &pszQuery,
-                          "%s%s%s",
-                          pszTemp ? pszTemp : "",
-                          pszKeyValue,
-                          pszQuery ? "&" : "");
-            BAIL_ON_ERROR(dwError);
-        }
+        pszTemp = pszQuery;
+        pszQuery = NULL;
+        dwError = coapi_allocate_string_printf(
+                      &pszQuery,
+                      "%s%s%s",
+                      pszTemp ? pszTemp : "",
+                      pszTemp ? "&" : "",
+                      pszKeyValue);
+        BAIL_ON_ERROR(dwError);
 
         SAFE_FREE_MEMORY(pszKeyValue);
         SAFE_FREE_MEMORY(pszTemp);
@@ -303,91 +380,240 @@ get_path_and_query(
         pszTemp = NULL;
     }
 
-    dwError = coapi_allocate_string_printf(
-                  &pszEndpoint,
-                  "%s%s%s",
-                  pszEndpointTemp,
-                  pszQuery ? "?" : "",
-                  pszQuery ? pszQuery : "");
-    BAIL_ON_ERROR(dwError);
-
-    *ppszEndpoint = pszEndpoint;
+    *ppszQuery = pszQuery;
 cleanup:
-    SAFE_FREE_MEMORY(pszEndpointTemp);
-    SAFE_FREE_MEMORY(pszQuery);
     SAFE_FREE_MEMORY(pszKeyValue);
     SAFE_FREE_MEMORY(pszTemp);
     return dwError;
 
 error:
-    if(ppszEndpoint)
+    if(ppszQuery)
     {
-        *ppszEndpoint = NULL;
+        *ppszQuery = NULL;
     }
-    SAFE_FREE_MEMORY(pszEndpoint);
+    SAFE_FREE_MEMORY(pszQuery);
+    goto cleanup;
+}
+
+uint32_t
+rest_get_method(
+    PREST_API_DEF pApiDef,
+    PREST_CMD_ARGS pRestArgs,
+    PREST_API_ENDPOINT *ppEndpoint,
+    PREST_API_METHOD *ppMethod
+    )
+{
+    uint32_t dwError = 0;
+    PREST_API_METHOD pMethod = NULL;
+    PREST_API_ENDPOINT pEndpoint = NULL;
+    RESTMETHOD nRestMethod = METHOD_GET;
+    char *pszMethods[] = {"GET", "PUT", "POST", "DELETE", "PATCH"};
+
+    if(!pApiDef || !pRestArgs || !ppMethod)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    nRestMethod = pRestArgs->nRestMethod;
+
+    dwError = get_method_spec(
+                  pApiDef->pModules,
+                  pRestArgs->pszModule,
+                  pRestArgs->pszCmd,
+                  &pEndpoint
+                  );
+    if(dwError == ENOENT)
+    {
+        fprintf(stderr,
+                "There is no command named %s under module %s\n",
+                pRestArgs->pszCmd,
+                pRestArgs->pszModule);
+    }
+    BAIL_ON_ERROR(dwError);
+
+    if(nRestMethod >= METHOD_GET && nRestMethod <= METHOD_PATCH)
+    {
+        pMethod = pEndpoint->pMethods[nRestMethod];
+        if(!pMethod)
+        {
+            fprintf(stderr,
+                    "%s method not found for command: %s\n",
+                    pszMethods[nRestMethod],
+                    pRestArgs->pszCmd);
+        }
+    }
+    else if(pEndpoint->pMethods[METHOD_GET])
+    {
+        pRestArgs->nRestMethod = METHOD_GET;
+        pMethod = pEndpoint->pMethods[METHOD_GET];
+    }
+    else
+    {
+        int i = 0;
+        int nCount = 0;
+        for(i = METHOD_GET; i < METHOD_COUNT; ++i)
+        {
+            if(pEndpoint->pMethods[i])
+            {
+                nRestMethod = i;
+                ++nCount;
+            }
+        }
+        if(nCount > 1)
+        {
+            fprintf(stdout,
+                    "Multiple methods found. Please specify with -X\n");
+
+            for(i = METHOD_GET; i < METHOD_COUNT; ++i)
+            {
+                if(pEndpoint->pMethods[i])
+                {
+                    fprintf(stdout, "-X %s\n", pszMethods[i]);
+                }
+            }
+        }
+        else if(nCount == 1)
+        {
+            pRestArgs->nRestMethod = nRestMethod;
+            pMethod = pEndpoint->pMethods[nRestMethod];
+        }
+    }
+
+    if(!pMethod)
+    {
+        dwError = ENOENT;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    *ppMethod = pMethod;
+    if(ppEndpoint)
+    {
+        *ppEndpoint = pEndpoint;
+    }
+cleanup:
+    return dwError;
+
+error:
+    if(ppMethod)
+    {
+        *ppMethod = NULL;
+    }
+    if(ppEndpoint)
+    {
+        *ppEndpoint = NULL;
+    }
+    goto cleanup;
+}
+
+uint32_t
+rest_get_cmd_params(
+    PREST_API_DEF pApiDef,
+    PREST_CMD_ARGS pRestArgs
+    )
+{
+    uint32_t dwError = 0;
+    PREST_API_PARAM pApiParam = NULL;
+    PREST_API_METHOD pMethod = NULL;
+    PREST_CMD_PARAM pParam = NULL;
+    int nParamCount = 0;
+
+    if(!pApiDef || !pRestArgs)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    dwError = rest_get_method(pApiDef, pRestArgs, NULL, &pMethod);
+    BAIL_ON_ERROR(dwError);
+
+    for(pApiParam = pMethod->pParams, nParamCount = 0;
+        pApiParam;
+        pApiParam = pApiParam->pNext, ++nParamCount)
+    {
+        const char *pszName = pApiParam->pszName;
+
+        dwError = coapi_allocate_memory(
+                      sizeof(REST_CMD_PARAM),
+                      (void **)&pParam);
+        BAIL_ON_ERROR(dwError);
+
+        pParam->nRequired = pApiParam->nRequired;
+        dwError = coapi_allocate_string(pApiParam->pszName, &pParam->pszName);
+        BAIL_ON_ERROR(dwError);
+
+        pParam->pNext = pRestArgs->pParams;
+        pRestArgs->pParams = pParam;
+        pParam = NULL;
+    }
+    pRestArgs->nParamCount = nParamCount;
+cleanup:
+    return dwError;
+
+error:
+    free_rest_cmd_params(pParam);
     goto cleanup;
 }
 
 uint32_t
 rest_exec(
     PREST_API_DEF pApiDef,
-    PPARSE_CONTEXT pContext
+    PCMD_ARGS pArgs,
+    PREST_CMD_ARGS pRestArgs
     )
 {
     uint32_t dwError = 0;
     PREST_API_METHOD pMethod = NULL;
     char *pszUrl = NULL;
     char *pszEndpoint = NULL;
-    RESTMETHOD nMethod = METHOD_GET;
-    PREST_API_ENDPOINT pEndPoint = NULL;
+    PREST_API_ENDPOINT pEndpoint = NULL;
+    char *pszParams = NULL;
 
-    if(!pApiDef || !pContext)
+    if(!pApiDef || !pArgs || !pRestArgs)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
     }
 
-    dwError = get_method_spec(
-                  pApiDef->pModules,
-                  pContext->pszModule,
-                  pContext->pszCmd,
-                  &pEndPoint
-                  );
+    dwError = rest_get_method(pApiDef, pRestArgs, &pEndpoint, &pMethod);
     BAIL_ON_ERROR(dwError);
 
-    pMethod = pEndPoint->pMethods[METHOD_GET];
-    if(!pMethod)
-    {
-        fprintf(stderr,
-                "GET method not found for command: %s\n",
-                pContext->pszCmd);
-        dwError = ENOENT;
-        BAIL_ON_ERROR(dwError);
-    }
-
-    dwError = get_path_and_query(
-                  pContext,
-                  pMethod->pParams,
-                  pEndPoint->pszActualName,
-                  &pszEndpoint);
+    dwError = get_query_string(pRestArgs, pMethod->pParams, &pszParams);
     if(dwError == ENOENT)
     {
         dwError = 0;
     }
     BAIL_ON_ERROR(dwError);
 
-    dwError = coapi_allocate_string_printf(
-                  &pszUrl,
-                  "%s://%s%s",
-                  pApiDef->nHasSecureScheme ? "https" : "http",
-                  pApiDef->pszHost,
-                  pszEndpoint ? pszEndpoint : pEndPoint->pszActualName);
-    BAIL_ON_ERROR(dwError);
+    if(IsNullOrEmptyString(pArgs->pszBaseUrl))
+    {
+        dwError = coapi_allocate_string_printf(
+                      &pszUrl,
+                      "%s://%s%s%s%s",
+                      pApiDef->nHasSecureScheme ? "https" : "http",
+                      pApiDef->pszHost,
+                      pEndpoint->pszName,
+                      pszParams ? "?" : "",
+                      pszParams ? pszParams : "");
+        BAIL_ON_ERROR(dwError);
+    }
+    else
+    {
+        dwError = coapi_allocate_string_printf(
+                      &pszUrl,
+                      "%s%s%s%s",
+                      pArgs->pszBaseUrl,
+                      pEndpoint->pszName,
+                      pszParams ? "?" : "",
+                      pszParams ? pszParams : "");
+        BAIL_ON_ERROR(dwError);
+    }
 
-    dwError = call_rest_method(pszUrl, pMethod, pContext->nVerbose);
+    dwError = call_rest_method(pszUrl, pMethod, pArgs);
     BAIL_ON_ERROR(dwError);
 
 cleanup:
+    SAFE_FREE_MEMORY(pszParams);
     SAFE_FREE_MEMORY(pszUrl);
     SAFE_FREE_MEMORY(pszEndpoint);
     return dwError;

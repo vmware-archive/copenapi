@@ -15,7 +15,7 @@ AC_PROG_LIBTOOL
 CPPFLAGS="$CPPFLAGS -D_REENTRANT -D_GNU_SOURCE -fPIC"
 
 AM_CPPFLAGS="$AM_CPPFLAGS -I${top_srcdir}/include" 
-AM_CFLAGS="$AM_CFLAGS -Wall -Werror -Wno-unused-variable -fno-strict-aliasing"
+AM_CFLAGS="$AM_CFLAGS -Wall -Werror -Wno-unused-variable -fno-strict-aliasing -fstack-protector-strong"
 
 AC_SUBST(AM_CPPFLAGS)
 AC_SUBST(AM_CFLAGS)

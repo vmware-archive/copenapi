@@ -66,6 +66,7 @@ coapi_load_endpoints(
 uint32_t
 coapi_load_parameters(
     json_t *pMethod,
+    PREST_API_ENDPOINT pEndpoint,
     PREST_API_PARAM *ppParam
     );
 

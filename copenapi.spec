@@ -1,6 +1,6 @@
 Name:          copenapi
 Summary:       c open api spec parser
-Version:       0.1
+Version:       0.2
 Release:       1%{?dist}
 Group:         Development/Libraries
 Vendor:        VMware, Inc.

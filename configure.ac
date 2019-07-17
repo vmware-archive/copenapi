@@ -1,4 +1,4 @@
-AC_INIT(copenapi, 0.1)
+AC_INIT(copenapi, 0.2)
 AC_MSG_NOTICE([copenapi configuration])
 
 AC_CONFIG_MACRO_DIR([m4])

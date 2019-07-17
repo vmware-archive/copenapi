@@ -250,7 +250,7 @@ coapi_load_endpoints(
 
             pRestMethod->nMethod = nMethod;
 
-            dwError = coapi_load_parameters(pMethod, &pRestMethod->pParams);
+            dwError = coapi_load_parameters(pMethod, pEndPoint, &pRestMethod->pParams);
             if(dwError == ENODATA)
             {
                 dwError = 0;//allow no params
@@ -359,8 +359,44 @@ error:
 }
 
 uint32_t
+coapi_has_path_param(
+   PREST_API_ENDPOINT pEndpoint,
+   const char *pszParam,
+   int *phasParam
+   )
+{
+   uint32_t dwError = 0;
+   int hasParam = 0;
+   char *paramFormatted = NULL;
+
+   if (!pEndpoint || IsNullOrEmptyString(pszParam) || !phasParam)
+   {
+      dwError = EINVAL;
+      BAIL_ON_ERROR(dwError);
+   }
+
+   dwError = coapi_allocate_string_printf(&paramFormatted, "{%s}", pszParam);
+   BAIL_ON_ERROR(dwError);
+
+   if (strstr(pEndpoint->pszActualName, paramFormatted))
+   {
+      hasParam = 1;
+   }
+
+   *phasParam = hasParam;
+
+cleanup:
+   SAFE_FREE_MEMORY(paramFormatted);
+   return dwError;
+
+error:
+   goto cleanup;
+}
+
+uint32_t
 coapi_load_parameters(
     json_t *pMethod,
+    PREST_API_ENDPOINT pEndpoint,
     PREST_API_PARAM *ppParams
     )
 {
@@ -370,8 +406,9 @@ coapi_load_parameters(
     PREST_API_PARAM pParam = NULL;
     json_t *pJsonParams = NULL;
     json_t *pJsonParam = NULL;
+    int hasParam = 0;
 
-    if(!pMethod || !ppParams)
+    if(!pMethod || !pEndpoint || !ppParams)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
@@ -414,9 +451,30 @@ coapi_load_parameters(
         }
         else
         {
-            fprintf(stderr, "parameter: missing required field - in\n");
-            dwError = EINVAL;
-            BAIL_ON_ERROR(dwError);
+            /* assume path if "in" is missing */
+            dwError = coapi_has_path_param(pEndpoint, pParam->pszName, &hasParam);
+            if (dwError)
+            {
+               fprintf(stderr, "parameter: %s missing required field - in\n",
+                       pParam->pszName);
+               BAIL_ON_ERROR(dwError);
+            }
+            if (hasParam) {
+               /*
+               fprintf(stderr, "parameter: %s missing required field - in. assuming path\n",
+                       pParam->pszName);
+               */
+               dwError = coapi_allocate_string("path", &pParam->pszIn);
+               BAIL_ON_ERROR(dwError);
+            }
+            else {
+               /*
+               fprintf(stderr, "parameter: %s missing required field - in. assuming query\n",
+                       pParam->pszName);
+               */
+               dwError = coapi_allocate_string("query", &pParam->pszIn);
+               BAIL_ON_ERROR(dwError);
+            }
         }
 
         pTemp = json_object_get(pJsonParam, "required");

@@ -81,6 +81,7 @@ typedef struct _CMD_ARGS_
     int nCmdIndex;
     RESTMETHOD nRestMethod;
     char **ppszCmds;
+    PCONF_DATA pConfigData;
 }CMD_ARGS, *PCMD_ARGS;
 
 #ifdef __cplusplus

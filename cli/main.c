@@ -91,11 +91,14 @@ main(
         goto cleanup;
     }
 
+    dwError = get_config_data(&pArgs->pConfigData);
+    BAIL_ON_ERROR(dwError);
+
     pszApiSpec = pArgs->pszApiSpec;
 
     if(IsNullOrEmptyString(pszApiSpec))
     {
-        dwError = get_default_api_spec(&pszDefaultApiSpec);
+        dwError = get_default_api_spec(pArgs->pConfigData, &pszDefaultApiSpec);
         BAIL_ON_ERROR(dwError);
 
         pszApiSpec = pszDefaultApiSpec;

@@ -156,6 +156,7 @@ show_module_commands(
 {
     uint32_t dwError = 0;
     PREST_API_ENDPOINT pEndPoint = NULL;
+    const char *pszAlternate = NULL;
 
     if(!pModule)
     {
@@ -176,9 +177,10 @@ show_module_commands(
             PREST_API_METHOD pMethod = pEndPoint->pMethods[i];
             if(pMethod)
             {
+		pszAlternate = pMethod->pszOperationId ? pMethod->pszOperationId : pEndPoint->pszCommandName;
                 fprintf(stdout,
                         "%-15s %-75s\n",
-                        pEndPoint->pszCommandName,
+                        pEndPoint->pszCommandName[0] == '{' ? pszAlternate : pEndPoint->pszCommandName,
                         pMethod->pszSummary);
             }
         }
@@ -214,7 +216,7 @@ find_matching_endpoints(
 
     for(pEndPoint = pEndPoints; pEndPoint; pEndPoint = pEndPoint->pNext)
     {
-        char *pszFind = strstr(pEndPoint->pszName, pszCmd);
+        char *pszFind = strstr(pEndPoint->pszActualName, pszCmd);
         //must match at the end
         if(pszFind && !strcasecmp(pszFind, pszCmd))
         {
@@ -236,7 +238,7 @@ find_matching_endpoints(
     nEndPoints = 0;
     for(pEndPoint = pEndPoints; pEndPoint; pEndPoint = pEndPoint->pNext)
     {
-        char *pszFind = strstr(pEndPoint->pszName, pszCmd);
+        char *pszFind = strstr(pEndPoint->pszActualName, pszCmd);
         //must match at the end
         if(pszFind && !strcasecmp(pszFind, pszCmd))
         {
@@ -259,24 +261,118 @@ error:
 }
 
 uint32_t
-show_method(
-    PREST_API_MODULE pModule,
+show_method_details(
+    PREST_API_METHOD pMethod,
+    int nMethodIndex
+    )
+{
+    uint32_t dwError = 0;
+    char *ppszMethods[METHOD_COUNT] = {"get", "put", "post", "delete", "patch"};
+    fprintf(stdout, "Method: %s\n", ppszMethods[nMethodIndex]);
+    fprintf(stdout, "Summary : %s\n", pMethod->pszSummary);
+    fprintf(stdout, "Description : %s\n", pMethod->pszDescription);
+    if(!pMethod->pParams)
+    {
+        fprintf(stdout, "Params : None\n");
+    }
+    else
+    {
+        int nParam = 0;
+        PREST_API_PARAM pParam = NULL;
+        for(pParam = pMethod->pParams; pParam; pParam = pParam->pNext)
+        {
+            fprintf(stdout,
+                    "Param%d : %s - %s\n",
+                    ++nParam,
+                    pParam->pszName,
+                    pParam->nRequired ? "Required" : "Optional");
+            if(pParam->nOptionCount)
+            {
+                int i = 0;
+                fprintf(stdout, "Values: [");
+                for(i = 0; i < pParam->nOptionCount; ++i)
+                {
+                    fprintf(stdout,
+                            "%s%s",
+                            pParam->ppszOptions[i],
+                            i + 1 == pParam->nOptionCount ? "" : ", ");
+                }
+                fprintf(stdout, "]\n");
+            }
+        }
+    }
+    fprintf(stdout, "\n");
+
+    return dwError;
+}
+
+uint32_t
+show_endpoint_by_operation_id(
+    PREST_API_ENDPOINT pEndPoints,
+    const char *pszCmd
+    )
+{
+    uint32_t dwError = 0;
+    int nEndPoints = 0;
+    PREST_API_ENDPOINT pEndPoint = NULL;
+    PREST_API_METHOD pMethod = NULL;
+    PREST_API_METHOD pMethodTemp = NULL;
+    RESTMETHOD method = METHOD_GET;
+
+    if(!pEndPoints || IsNullOrEmptyString(pszCmd))
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    for(; pEndPoints; pEndPoints = pEndPoints->pNext)
+    {
+	/* need only consider path substitutes at end for this */
+	if (pEndPoints->pszCommandName[0] != '{')
+            continue;
+	for(method = METHOD_GET; method < METHOD_COUNT; method++)
+	{
+	    pMethodTemp = pEndPoints->pMethods[method];
+	    if (pMethodTemp && pMethodTemp->pszOperationId)
+	    {
+                if(strcmp(pszCmd, pMethodTemp->pszOperationId) == 0)
+		{
+                    pEndPoint = pEndPoints;
+		    pMethod = pMethodTemp;
+		    break;
+		}
+	    }
+	}
+    }
+
+    if(!pEndPoint || !pMethod)
+    {
+        dwError = ENOENT;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    fprintf(stdout, "\n");
+    fprintf(stdout, "Name : %s\n", pEndPoint->pszActualName);
+    fprintf(stdout, "\n");
+
+    dwError = show_method_details(pMethod, pMethod->nMethod);
+    BAIL_ON_ERROR(dwError);
+error:
+    return dwError;
+}
+
+uint32_t
+show_all_matching_methods(
+    PREST_API_ENDPOINT pEndPoints,
     const char *pszMethod
     )
 {
     uint32_t dwError = 0;
     int i = 0;
     PREST_API_ENDPOINT *ppMatchingEndPoints = NULL;
-    PREST_API_ENDPOINT *ppEndPoint = NULL;
-
-    if(!pModule || IsNullOrEmptyString(pszMethod))
-    {
-        dwError = EINVAL;
-        BAIL_ON_ERROR(dwError);
-    }
 
     dwError = find_matching_endpoints(
-                  pModule->pEndPoints,
+                  pEndPoints,
                   pszMethod,
                   &ppMatchingEndPoints);
     BAIL_ON_ERROR(dwError);
@@ -289,54 +385,43 @@ show_method(
         fprintf(stdout, "\n");
         for(nMethodIndex = 0; nMethodIndex < METHOD_COUNT; ++nMethodIndex)
         {
-            char *ppszMethods[METHOD_COUNT] =
-                {"get", "put", "post", "delete", "patch"};
             PREST_API_METHOD pMethod = ppMatchingEndPoints[i]->pMethods[nMethodIndex];
             if(!pMethod)
             {
                 continue;
             }
-            fprintf(stdout, "Method: %s\n", ppszMethods[nMethodIndex]);
-            fprintf(stdout, "Summary : %s\n", pMethod->pszSummary);
-            fprintf(stdout, "Description : %s\n", pMethod->pszDescription);
-            if(!pMethod->pParams)
-            {
-                fprintf(stdout, "Params : None\n");
-            }
-            else
-            {
-                int nParam = 0;
-                PREST_API_PARAM pParam = NULL;
-                for(pParam = pMethod->pParams; pParam; pParam = pParam->pNext)
-                {
-                    fprintf(stdout,
-                            "Param%d : %s - %s\n",
-                            ++nParam,
-                            pParam->pszName,
-                            pParam->nRequired ? "Required" : "Optional");
-                    if(pParam->nOptionCount)
-                    {
-                        int i = 0;
-                        fprintf(stdout, "Values: [");
-                        for(i = 0; i < pParam->nOptionCount; ++i)
-                        {
-                            fprintf(stdout,
-                                    "%s%s",
-                                    pParam->ppszOptions[i],
-                                    i + 1 == pParam->nOptionCount ? "" : ", ");
-                        }
-                        fprintf(stdout, "]\n");
-                    }
-                }
-            }
-            fprintf(stdout, "\n");
-        }
+	    dwError = show_method_details(pMethod, nMethodIndex);
+            BAIL_ON_ERROR(dwError);
+	}
     }
-
-cleanup:
+error:
     SAFE_FREE_MEMORY(ppMatchingEndPoints);
     return dwError;
+}
+
+uint32_t
+show_method(
+    PREST_API_MODULE pModule,
+    const char *pszMethod
+    )
+{
+    uint32_t dwError = 0;
+    PREST_API_ENDPOINT pEndPoint = NULL;
+    PREST_API_METHOD pMethod = NULL;
+
+    if(!pModule || IsNullOrEmptyString(pszMethod))
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    dwError = show_all_matching_methods(pModule->pEndPoints, pszMethod);
+    if (dwError == ENOENT)
+    {
+        dwError = show_endpoint_by_operation_id(pModule->pEndPoints, pszMethod);
+    }
+    BAIL_ON_ERROR(dwError);
 
 error:
-    goto cleanup;
+    return dwError;
 }

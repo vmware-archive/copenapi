@@ -187,8 +187,12 @@ has_module(
 
 uint32_t
 get_default_api_spec(
+    PCONF_DATA pConfigData,
     char **ppszApiSpec
     );
+
+uint32_t
+get_config_data(PCONF_DATA *ppConfigData);
 
 void
 show_error(

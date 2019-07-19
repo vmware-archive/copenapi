@@ -278,6 +278,7 @@ free_cmd_args(
         SAFE_FREE_MEMORY(pCmdArgs->pszBaseUrl);
         coapi_free_string_array_with_count(pCmdArgs->ppszCmds,
                                            pCmdArgs->nCmdCount);
+        free_config_data(pCmdArgs->pConfigData);
     }
     SAFE_FREE_MEMORY(pCmdArgs);
 }

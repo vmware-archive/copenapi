@@ -54,25 +54,21 @@ error:
 }
 
 uint32_t
-read_default_config(
-    const char *pszFile,
+get_default_api_spec(
+    PCONF_DATA pData,
     char **ppszApiSpec
     )
 {
     uint32_t dwError = 0;
     char *pszApiSpec = NULL;
-    PCONF_DATA pData = NULL;
     PCONF_SECTION pSection = NULL;
     PKEYVALUE pKeyValues = NULL;
 
-    if(IsNullOrEmptyString(pszFile) || !ppszApiSpec)
+    if(!pData || !ppszApiSpec)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
     }
-
-    dwError = read_config_file(pszFile, 0, &pData);
-    BAIL_ON_ERROR(dwError);
 
     dwError = config_get_section(pData, "default", &pSection);
     BAIL_ON_ERROR(dwError);
@@ -92,7 +88,6 @@ read_default_config(
     *ppszApiSpec = pszApiSpec;
 
 cleanup:
-    free_config_data(pData);
     return dwError;
 
 error:
@@ -149,18 +144,17 @@ error:
     goto cleanup;
 }
 
-uint32_t
-get_default_api_spec(
-    char **ppszApiSpec
+static uint32_t
+_get_default_config_name(
+    char **ppszConfig
     )
 {
     uint32_t dwError = 0;
-    char *pszApiSpec = NULL;
     char pszCWD[MAXPATHLEN] = {0};
     char *pszConfig = NULL;
     char *pszHomeDir = NULL;
 
-    if(!ppszApiSpec)
+    if(!ppszConfig)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
@@ -209,24 +203,50 @@ get_default_api_spec(
         }
     }
 
-    dwError = read_default_config(pszConfig, &pszApiSpec);
-    BAIL_ON_ERROR(dwError);
-
-    *ppszApiSpec = pszApiSpec;
+    *ppszConfig = pszConfig;
 
 cleanup:
-    SAFE_FREE_MEMORY(pszConfig);
     SAFE_FREE_MEMORY(pszHomeDir);
     return dwError;
 
 error:
-    if(ppszApiSpec)
+    if(ppszConfig)
     {
-        *ppszApiSpec = NULL;
+        *ppszConfig = NULL;
     }
-    SAFE_FREE_MEMORY(pszApiSpec);
+    SAFE_FREE_MEMORY(pszConfig);
     goto cleanup;
 }
+
+uint32_t
+get_config_data(PCONF_DATA *ppConfigData)
+{
+    uint32_t dwError = 0;
+    char *pszConfig = NULL;
+    PCONF_DATA pConfigData = NULL;
+
+    if (!ppConfigData)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    dwError = _get_default_config_name(&pszConfig);
+    BAIL_ON_ERROR(dwError);
+
+    dwError = read_config_file(pszConfig, 0, &pConfigData);
+    BAIL_ON_ERROR(dwError);
+
+    *ppConfigData = pConfigData;
+
+cleanup:
+    SAFE_FREE_MEMORY(pszConfig);
+    return dwError;
+
+error:
+    free_config_data(pConfigData);
+    goto cleanup;
+} 
 
 void
 show_error(

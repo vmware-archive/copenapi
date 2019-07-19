@@ -160,6 +160,17 @@ error:
     goto cleanup;
 }
 
+/*
+static int
+IsPathParam(const char *pszParam)
+{
+    size_t len = strlen(pszParam);
+    if (len == 0)
+        return 0;
+    return (*pszParam == '{' && pszParam[len-1] == '}');
+}
+*/
+
 uint32_t
 coapi_load_endpoints(
     json_t *pRoot,
@@ -173,6 +184,7 @@ coapi_load_endpoints(
     const char *pszKey = NULL;
     PREST_API_ENDPOINT pEndPoint = NULL;
     PREST_API_METHOD pRestMethod = NULL;
+    char *pszPathCommand = NULL;
 
     if(!pRoot || !pszBasePath || !pApiModules)
     {
@@ -257,6 +269,12 @@ coapi_load_endpoints(
             }
             BAIL_ON_ERROR(dwError);
 
+            dwError = json_safe_get_string_value(
+                          pMethod,
+                          "operationId",
+                          &pRestMethod->pszOperationId);
+            BAIL_ON_ERROR(dwError);
+
             if(IsNullOrEmptyString(pEndPoint->pszName))
             {
                 dwError = coapi_replace_endpoint_path(
@@ -290,6 +308,7 @@ coapi_load_endpoints(
     }
 
 cleanup:
+    free(pszPathCommand);
     return dwError;
 
 error:
@@ -1458,6 +1477,7 @@ coapi_free_api_method(
     coapi_free_memory(pMethod->pszMethod);
     SAFE_FREE_MEMORY(pMethod->pszSummary);
     SAFE_FREE_MEMORY(pMethod->pszDescription);
+    SAFE_FREE_MEMORY(pMethod->pszOperationId);
     SAFE_FREE_MEMORY(pMethod);
 }
 

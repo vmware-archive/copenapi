@@ -79,6 +79,7 @@ typedef struct _REST_API_METHOD_
     char *pszMethod;
     char *pszSummary;
     char *pszDescription;
+    char *pszOperationId;
     PREST_API_PARAM pParams;
     PFN_MODULE_ENDPOINT_CB pFnImpl;
 }REST_API_METHOD, *PREST_API_METHOD;

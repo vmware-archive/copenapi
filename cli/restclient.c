@@ -14,32 +14,63 @@
 
 #include "includes.h"
 
+struct slist_holder
+{
+    struct curl_slist **list;
+};
+
 int trace_fn(CURL *handle, curl_infotype type,
              char *data, size_t size,
              void *userp);
 
 static uint32_t
-_apply_header(CURL *pCurl) {
-    int dwError = 0;
-    struct curl_slist * list = NULL;
-
-    if (!pCurl)
+_apply_single_header(void *userdata, const char *key, const char *value)
+{
+    uint32_t dwError = 0;
+    struct slist_holder *holder = (struct slist_holder *)userdata;
+    char *pszHeader = NULL;
+    if (!holder|| !key || !value)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
     }
 
-    /* */
-    if (list)
+//if (strcasecmp("authorization", key) == 0) goto error;
+
+    dwError = coapi_allocate_string_printf(&pszHeader, "%s:%s", key, value);
+    BAIL_ON_ERROR(dwError);
+
+    *(holder->list) = curl_slist_append(*(holder->list), pszHeader);
+
+error:
+    SAFE_FREE_MEMORY(pszHeader);
+    return dwError;
+}
+
+static uint32_t
+_apply_header(PCMD_ARGS pArgs, CURL *pCurl, struct curl_slist **list) {
+    int dwError = 0;
+    struct slist_holder holder = {0};
+
+    if (!pArgs || !pArgs->pConfigData || !pCurl || !list)
     {
-        curl_easy_setopt(pCurl, CURLOPT_HTTPHEADER, list);
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    holder.list = list;
+    dwError = get_default_headers(pArgs->pConfigData,
+                                  &holder,
+                                  _apply_single_header
+                                 );
+    BAIL_ON_ERROR(dwError);
+
+    if (*list)
+    {
+        curl_easy_setopt(pCurl, CURLOPT_HTTPHEADER, *list);
     }
 
 cleanup:
-    if (list)
-    {
-        curl_slist_free_all(list);
-    }
     return dwError;
 error:
     goto cleanup;
@@ -56,6 +87,7 @@ call_rest_method(
     CURL *pCurl = NULL;
     CURLcode res = CURLE_OK;
     long nStatus = 0;
+    struct curl_slist *list = NULL;
 
     if(IsNullOrEmptyString(pszUrl) || !pMethod || !pArgs)
     {
@@ -120,7 +152,7 @@ call_rest_method(
             BAIL_ON_CURL_ERROR(dwError);
         }
 
-        dwError = _apply_header(pCurl);
+        dwError = _apply_header(pArgs, pCurl, &list);
         BAIL_ON_CURL_ERROR(dwError);
 
         dwError = curl_easy_perform(pCurl);
@@ -148,6 +180,10 @@ call_rest_method(
     }
 
 cleanup:
+    if (list)
+    {
+        curl_slist_free_all(list);
+    }
     if(pCurl)
     {
         curl_easy_cleanup(pCurl);

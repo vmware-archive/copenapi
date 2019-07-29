@@ -131,9 +131,9 @@ show_modules(
     while(pModule)
     {
         fprintf(stdout,
-                " " BOLD "%-15s " RESET ": %-75s\n",
+                " " BOLD "%-20s " RESET ": %-70s\n",
                 pModule->pszName,
-                pModule->pszDescription);
+                pModule->pszDescription ? pModule->pszDescription : "No description");
         pModule = pModule->pNext;
     }
 

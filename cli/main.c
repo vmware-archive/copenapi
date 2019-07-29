@@ -75,8 +75,6 @@ main(
     PREST_CMD_ARGS pRestCmdArgs = NULL;
     PCMD_ARGS pArgs = NULL;
     char **argvDup = NULL;
-    char *pszDefaultApiSpec = NULL;
-    const char *pszApiSpec = NULL;
     char *pszPass = NULL;
 
     dwError = dup_argv(argc, argv, &argvDup);
@@ -94,17 +92,15 @@ main(
     dwError = get_config_data(&pArgs->pConfigData);
     BAIL_ON_ERROR(dwError);
 
-    pszApiSpec = pArgs->pszApiSpec;
-
-    if(IsNullOrEmptyString(pszApiSpec))
+    if(IsNullOrEmptyString(pArgs->pszApiSpec))
     {
-        dwError = get_default_api_spec(pArgs->pConfigData, &pszDefaultApiSpec);
+        dwError = get_default_value(pArgs->pConfigData,
+                                    CONFIG_KEY_APISPEC,
+                                    &pArgs->pszApiSpec);
         BAIL_ON_ERROR(dwError);
-
-        pszApiSpec = pszDefaultApiSpec;
     }
 
-    dwError = coapi_load_from_file(pszApiSpec, &pApiDef);
+    dwError = coapi_load_from_file(pArgs->pszApiSpec, &pApiDef);
     BAIL_ON_ERROR(dwError);
 
     if(argc < 2 || pArgs->nHelp)
@@ -126,6 +122,22 @@ main(
     if(pRestCmdArgs->nParamCount > 0)
     {
         dwError = parse_cmd_args(argc, argvDup, pRestCmdArgs);
+        BAIL_ON_ERROR(dwError);
+    }
+
+    if(IsNullOrEmptyString(pArgs->pszBaseUrl))
+    {
+        dwError = get_default_value(pArgs->pConfigData,
+                                    CONFIG_KEY_BASEURL,
+                                    &pArgs->pszBaseUrl);
+        BAIL_ON_ERROR(dwError);
+    }
+
+    if (!pArgs->nInsecure)
+    {
+        dwError = get_default_int(pArgs->pConfigData,
+                                    CONFIG_KEY_INSECURE,
+                                    &pArgs->nInsecure);
         BAIL_ON_ERROR(dwError);
     }
 
@@ -153,7 +165,6 @@ main(
 
 cleanup:
     SAFE_FREE_MEMORY(pszPass);
-    SAFE_FREE_MEMORY(pszDefaultApiSpec);
     curl_global_cleanup();
     if(argvDup)
     {
@@ -171,7 +182,7 @@ cleanup:
     return dwError;
 
 error:
-    if(!pszApiSpec)
+    if(pArgs && !pArgs->pszApiSpec)
     {
         fprintf(stderr,
 "\nPlease specify an api spec using one or more of the following:\n"

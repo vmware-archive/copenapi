@@ -36,6 +36,11 @@
 #define OPT_HELP     "help"
 #define OPT_REQUEST  "request"
 
+#define CONFIG_KEY_APISPEC     "apispec"
+#define CONFIG_KEY_BASEURL     "baseurl"
+#define CONFIG_KEY_HEADER      "header."
+#define CONFIG_KEY_INSECURE    "insecure"
+
 #define BAIL_ON_CURL_ERROR(dwError) \
     do {                                                           \
         if (dwError)                                               \

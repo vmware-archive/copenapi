@@ -186,13 +186,24 @@ has_module(
     );
 
 uint32_t
-get_default_api_spec(
+get_default_int(
     PCONF_DATA pConfigData,
+    const char *pszKey,
+    int *pnValue
+    );
+
+uint32_t
+get_default_value(
+    PCONF_DATA pConfigData,
+    const char *pszKey,
     char **ppszApiSpec
     );
 
 uint32_t
 get_config_data(PCONF_DATA *ppConfigData);
+
+uint32_t
+get_default_headers(PCONF_DATA pData, void *userdata, PFN_HEADER_CB fn);
 
 void
 show_error(

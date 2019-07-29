@@ -84,6 +84,13 @@ typedef struct _CMD_ARGS_
     PCONF_DATA pConfigData;
 }CMD_ARGS, *PCMD_ARGS;
 
+typedef uint32_t
+(*PFN_HEADER_CB)(
+    void *userdata,
+    const char *key,
+    const char *value
+    );
+
 #ifdef __cplusplus
 }
 #endif

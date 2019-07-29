@@ -54,17 +54,38 @@ error:
 }
 
 uint32_t
-get_default_api_spec(
+get_default_int(
     PCONF_DATA pData,
-    char **ppszApiSpec
+    const char *pszKey,
+    int *pnValue
+    )
+{
+   uint32_t dwError = 0;
+   char *szValue = NULL;
+
+   dwError = get_default_value(pData, pszKey, &szValue);
+   BAIL_ON_ERROR(dwError);
+
+   *pnValue = atoi(szValue);
+
+error:
+   SAFE_FREE_MEMORY(szValue);
+   return dwError;
+}
+
+uint32_t
+get_default_value(
+    PCONF_DATA pData,
+    const char *pszKey,
+    char **ppszValue
     )
 {
     uint32_t dwError = 0;
-    char *pszApiSpec = NULL;
+    char *pszValue = NULL;
     PCONF_SECTION pSection = NULL;
     PKEYVALUE pKeyValues = NULL;
 
-    if(!pData || !ppszApiSpec)
+    if(!pData || !pszKey || !ppszValue)
     {
         dwError = EINVAL;
         BAIL_ON_ERROR(dwError);
@@ -76,26 +97,26 @@ get_default_api_spec(
     pKeyValues = pSection->pKeyValues;
     for(; pKeyValues; pKeyValues = pKeyValues->pNext)
     {
-        if(!strcmp(pKeyValues->pszKey, "apispec"))
+        if(!strcmp(pKeyValues->pszKey, pszKey))
         {
             dwError = coapi_allocate_string(
                           pKeyValues->pszValue,
-                          &pszApiSpec);
+                          &pszValue);
             BAIL_ON_ERROR(dwError);
         }
     }
 
-    *ppszApiSpec = pszApiSpec;
+    *ppszValue = pszValue;
 
 cleanup:
     return dwError;
 
 error:
-    if(ppszApiSpec)
+    if(ppszValue)
     {
-        *ppszApiSpec = NULL;
+        *ppszValue = NULL;
     }
-    SAFE_FREE_MEMORY(pszApiSpec);
+    SAFE_FREE_MEMORY(pszValue);
     goto cleanup;
 }
 
@@ -247,6 +268,44 @@ error:
     free_config_data(pConfigData);
     goto cleanup;
 } 
+
+uint32_t
+get_default_headers(PCONF_DATA pData, void *userdata, PFN_HEADER_CB fn)
+{
+    uint32_t dwError = 0;
+    PCONF_SECTION pSection = NULL;
+    PKEYVALUE pKeyValues = NULL;
+    size_t nHeader = 0;
+
+    if(!pData || !fn)
+    {
+        dwError = EINVAL;
+        BAIL_ON_ERROR(dwError);
+    }
+
+    nHeader = strlen(CONFIG_KEY_HEADER);
+
+    dwError = config_get_section(pData, "default", &pSection);
+    BAIL_ON_ERROR(dwError);
+
+    pKeyValues = pSection->pKeyValues;
+    for(; pKeyValues; pKeyValues = pKeyValues->pNext)
+    {
+        if(!strncmp(pKeyValues->pszKey, CONFIG_KEY_HEADER, nHeader))
+        {
+            dwError = fn(userdata,
+                         pKeyValues->pszKey+nHeader,
+                         pKeyValues->pszValue);
+            BAIL_ON_ERROR(dwError);
+        }
+    }
+
+cleanup:
+    return dwError;
+
+error:
+    goto cleanup;
+}
 
 void
 show_error(
